@@ -1,4 +1,4 @@
-package adb
+package adbbot
 
 import (
 	"image"
@@ -19,11 +19,11 @@ func abs(a, b uint8) (int64){
 	return c * c
 }
 
-func FindExistReg(tmpl *Tmpl, times int, delay int) (x int, y int, val float64){
+func (b Bot) FindExistReg(tmpl *Tmpl, times int, delay int) (x int, y int, val float64){
 
 	for i := 0; i < times; i++ {
 		Vlogln(4, "Screencap()", i)
-		img, err := Screencap()
+		img, err := b.Screencap()
 		if err != nil {
 			continue
 		}
@@ -49,11 +49,11 @@ func FindExistReg(tmpl *Tmpl, times int, delay int) (x int, y int, val float64){
 	return
 }
 
-func FindExistP(subimg image.Image, times int, delay int) (x int, y int, val float64){
+func (b Bot) FindExistP(subimg image.Image, times int, delay int) (x int, y int, val float64){
 
 	for i := 0; i < times; i++ {
 		Vlogln(4, "Screencap()", i)
-		img, err := Screencap()
+		img, err := b.Screencap()
 		if err != nil {
 			continue
 		}

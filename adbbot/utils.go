@@ -1,4 +1,4 @@
-package adb
+package adbbot
 
 import (
 	"errors"
@@ -24,6 +24,8 @@ type Tmpl struct {
 	Region     image.Rectangle
 	ImagePath  string
 }
+
+var RectAll = image.ZR
 
 func timeStart() (){
 	timeT0 = time.Now()
@@ -52,6 +54,15 @@ func NewTmpl(filename string, reg image.Rectangle) (*Tmpl, error){
 func NewRect(x, y, xp, yp int) (image.Rectangle){
 	return image.Rect(x, y, x+xp, y+yp)
 }
+
+func NewRectAbs(x, y, x2, y2 int) (image.Rectangle){
+	return image.Rect(x, y, x2, y2)
+}
+
+func NewRectAll() (image.Rectangle){
+	return image.ZR
+}
+
 
 
 // belows are copy and modify form Grigory Dryapak's Imaging

@@ -1,4 +1,4 @@
-package adb
+package adbbot
 
 import (
 	"encoding/binary"
@@ -7,177 +7,196 @@ import (
 	"strconv"
 )
 
-var dev = ""
-var adbexec = "adb"
+type Bot struct {
+	Dev             string
+	Exec            string
+	UseSU           bool
+	UsePipe         bool
 
-var local_tmp_path = "./"
-var adb_tmp_path = "/data/local/tmp/"
+	Local_tmp_path  string
+	Adb_tmp_path    string
 
-var adb_su = true
-var adb_pipe = true
+	Last_screencap  image.Image
 
-var Last_screencap image.Image
+	devstr          string
+	width           int
+	height          int
 
-var width = 0
-var height = 0
+	// shortcuts
+	NewTmpl                  func(filename string, reg image.Rectangle) (*Tmpl, error)
+	Rect, NewRect            func(x, y, xp, yp int) (image.Rectangle)
+	RectAbs, NewRectAbs      func(x, y, x2, y2 int) (image.Rectangle)
+	RectAll, NewRectAll      func() (image.Rectangle)
+}
 
-func SetDev(device string) {
+func NewBot() (*Bot) {
+	b := Bot{
+		Dev: "",
+		Exec: "adb",
+		UseSU: true,
+		UsePipe: true,
+
+		Local_tmp_path: "./",
+		Adb_tmp_path:  "/data/local/tmp/",
+		devstr: "",
+
+		Rect: NewRect,
+		RectAbs: NewRectAbs,
+		RectAll: NewRectAll,
+	}
+
+	b.NewTmpl = NewTmpl
+	b.NewRect = NewRect
+	b.NewRectAbs = NewRectAbs
+	b.NewRectAll = NewRectAll
+
+	return &b
+}
+
+func (b Bot) SetDev(device string) {
+	b.Dev = device
 	if device != "" {
-		dev = " -s " + device
+		b.devstr = " -s " + device
 	} else {
-		dev = ""
+		b.devstr = ""
 	}
 }
 
-func SetAdb(Adb string) {
-	adbexec = Adb
+func (b Bot) Run(parts string) ([]byte, error) {
+	return Cmd(b.Exec + b.devstr + " " + parts)
 }
 
-func SetMod(pipe bool, su bool) {
-	adb_pipe = pipe
-	adb_su = su
-}
+func (b Bot) Screencap() (img image.Image, err error){
+	var screencap []byte
 
-func Run(parts string) ([]byte, error) {
-	return Cmd(adbexec + dev + " " + parts)
-}
-
-func Screencap() (img image.Image, err error){
-	if adb_pipe {
-		img, err = screencap_pipe()
+	if b.UsePipe {
+		screencap, err = b.screencap_pipe()
 	} else {
-		img, err = screencap_file()
+		screencap, err = b.screencap_file()
+	}
+
+	b.width = int(binary.LittleEndian.Uint32(screencap[0:4]))
+	b.height = int(binary.LittleEndian.Uint32(screencap[4:8]))
+
+	Vlogln(5, "height = ", b.height)
+	Vlogln(5, "width = ", b.width)
+	Vlogln(5, "length = ", len(screencap[12:]))
+//	Vlogln(5, "dump = ", screencap[12:52])
+
+	img = &image.NRGBA{
+		Pix: screencap[12:],
+		Stride: b.width * 4, // bytes
+		Rect: image.Rect(0, 0, b.width, b.height),
 	}
 
 	if err == nil {
-		Last_screencap = img
+		b.Last_screencap = img
 	}
 
 	return img, err
 }
 
-func screencap_pipe() (image.Image, error){
-	screencap, err := Run("exec-out screencap")
+func (b Bot) screencap_pipe() ([]byte, error){
+	screencap, err := b.Run("exec-out screencap")
 	if err != nil {
 		return nil, err
 	}
 
-	width = int(binary.LittleEndian.Uint32(screencap[0:4]))
-	height = int(binary.LittleEndian.Uint32(screencap[4:8]))
-
-	Vlogln(5, "height = ", height)
-	Vlogln(5, "width = ", width)
-	Vlogln(5, "length = ", len(screencap[12:]))
-//	Vlogln(5, "dump = ", screencap[12:52])
-
-	img := &image.NRGBA{
-		Pix: screencap[12:],
-		Stride: width * 4, // bytes
-		Rect: image.Rect(0, 0, width, height),
-	}
-
-	return img, nil
+	return screencap, nil
 }
 
-func screencap_file() (image.Image, error){
+func (b Bot) screencap_file() ([]byte, error){
 
-	if adb_su {
-		_, err := Run("shell su -c screencap /dev/screencap-tmp.raw")
+	if b.UseSU {
+		_, err := b.Run("shell su -c screencap /dev/screencap-tmp.raw")
 		if err != nil {
 			return nil, err
 		}
-		_, err = Run("shell su -c chmod 666 /dev/screencap-tmp.raw")
+		_, err = b.Run("shell su -c chmod 666 /dev/screencap-tmp.raw")
 		if err != nil {
 			return nil, err
 		}
-		_, err = Run("pull /dev/screencap-tmp.raw " + local_tmp_path)
+		_, err = b.Run("pull /dev/screencap-tmp.raw " + b.Local_tmp_path)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		_, err := Run("shell screencap " + adb_tmp_path + "screencap-tmp.raw")
+		_, err := b.Run("shell screencap " + b.Adb_tmp_path + "screencap-tmp.raw")
 		if err != nil {
 			return nil, err
 		}
-		_, err = Run("pull " + adb_tmp_path + "screencap-tmp.raw " + local_tmp_path)
+		_, err = b.Run("pull " + b.Adb_tmp_path + "screencap-tmp.raw " + b.Local_tmp_path)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	screencap, err := ioutil.ReadFile(local_tmp_path + "screencap-tmp.raw")
+	screencap, err := ioutil.ReadFile(b.Local_tmp_path + "screencap-tmp.raw")
 	if err != nil {
 		return nil, err
 	}
 
-	width = int(binary.LittleEndian.Uint32(screencap[0:4]))
-	height = int(binary.LittleEndian.Uint32(screencap[4:8]))
-
-	Vlogln(5, "height = ", height)
-	Vlogln(5, "width = ", width)
-	Vlogln(5, "length = ", len(screencap[12:]))
-
-	img := &image.NRGBA{
-		Pix: screencap[12:],
-		Stride: width * 4, // bytes
-		Rect: image.Rect(0, 0, width, height),
-	}
-
-	return img, nil
+	return screencap, nil
 }
 
-/*func Click(x, y int) (err error){
-	_, err := Run("shell input tap " + strconv.Itoa(x) + " " + strconv.Itoa(y))
-	return
-}*/
 
-func Click(loc image.Point) (err error){
-	_, err = Run("shell input tap " + strconv.Itoa(loc.X) + " " + strconv.Itoa(loc.Y))
+func (b Bot) Click(loc image.Point) (err error){
+	_, err = b.Run("shell input tap " + strconv.Itoa(loc.X) + " " + strconv.Itoa(loc.Y))
 	return
 }
 
-func Swipe(a,b image.Point) (err error){
-	_, err = Run("shell input swipe " + strconv.Itoa(a.X) + " " + strconv.Itoa(a.Y) + " " + strconv.Itoa(b.X) + " " + strconv.Itoa(b.Y))
+func (b Bot) Swipe(p0,p1 image.Point) (err error){
+	_, err = b.Run("shell input swipe " + strconv.Itoa(p0.X) + " " + strconv.Itoa(p0.Y) + " " + strconv.Itoa(p1.X) + " " + strconv.Itoa(p1.Y))
 	return
 }
 
-func Text(in string) (err error){
-	_, err = Run("shell input text " + in)
+func (b Bot) Text(in string) (err error){
+	_, err = b.Run("shell input text " + in)
 	return
 }
 
-func Textln(in string) (err error){
-	err = Text(in)
+func (b Bot) Textln(in string) (err error){
+	err = b.Text(in)
 	if err != nil {
 		return
 	}
 
-	_, err = Run("shell input keyevent KEYCODE_ENTER")
+	_, err = b.Run("shell input keyevent KEYCODE_ENTER")
 	return
 }
 
-func Keyevent(in string) (err error){
-	_, err = Run("shell input keyevent " + in)
+func (b Bot) Keyevent(in string) (err error){
+	_, err = b.Run("shell input keyevent " + in)
 	return
 }
 
-func KeyHome() (err error){
-	_, err = Run("shell input keyevent KEYCODE_HOME")
+func (b Bot) KeyHome() (err error){
+	_, err = b.Run("shell input keyevent KEYCODE_HOME")
 	return
 }
 
-func StartApp(app string) (err error){
-	_, err = Run("shell monkey -p " + app + " -c android.intent.category.LAUNCHER 1")
+func (b Bot) KeyBack() (err error){
+	_, err = b.Run("shell input keyevent KEYCODE_BACK")
 	return
 }
 
-func KillApp(app string) (err error){
-	_, err = Run("shell am force-stop " + app)
+func (b Bot) KeySwitch() (err error){
+	_, err = b.Run("shell input keyevent KEYCODE_APP_SWITCH")
 	return
 }
 
-func SaveScreen(imagefile string) (err error){
-	img, err := Screencap()
+func (b Bot) StartApp(app string) (err error){
+	_, err = b.Run("shell monkey -p " + app + " -c android.intent.category.LAUNCHER 1")
+	return
+}
+
+func (b Bot) KillApp(app string) (err error){
+	_, err = b.Run("shell am force-stop " + app)
+	return
+}
+
+func (b Bot) SaveScreen(imagefile string) (err error){
+	img, err := b.Screencap()
 	if err != nil {
 		return
 	}
