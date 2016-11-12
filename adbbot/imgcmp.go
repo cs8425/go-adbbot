@@ -87,7 +87,7 @@ func FindP(img image.Image, subimg image.Image) (x int, y int, val float64) {
 	var min int64 = int64(subimg.Bounds().Dx() * subimg.Bounds().Dy() * 255 * 255 * 3) / 32
 //	var min int64 = 0x7fffffffffffffff
 
-	Vlogln(2, "Find @ = ", startX, endX, startY, endY)
+	Vlogln(4, "Find @ = ", startX, endX, startY, endY)
 
 	if nrgba, ok := img.(*image.NRGBA); ok {
 		if snrgba, ok := subimg.(*image.NRGBA); ok {
@@ -139,7 +139,7 @@ func Find(img image.Image, subimg image.Image) (x int, y int, val float64) {
 	var min int64 = int64(subimg.Bounds().Dx() * subimg.Bounds().Dy() * 255 * 255 * 3) / 32
 //	var min int64 = 0x7fffffffffffffff
 
-	Vlogln(2, "Find @ = ", startX, endX, startY, endY)
+	Vlogln(4, "Find @ = ", startX, endX, startY, endY)
 
 	if nrgba, ok := img.(*image.NRGBA); ok {
 		if snrgba, ok := subimg.(*image.NRGBA); ok {

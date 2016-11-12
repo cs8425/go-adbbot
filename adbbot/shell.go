@@ -46,7 +46,7 @@ func cmd_wg(cmd string, wg *sync.WaitGroup) {
 
 	out, err := exec.Command(head, parts...).Output()
 	if err != nil {
-		Vlogf(2, "%s", err)
+		Vlogf(3, "%s", err)
 	}
 	Vlogf(3, "%s", out)
 	wg.Done()

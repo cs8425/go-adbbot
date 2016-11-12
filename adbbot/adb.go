@@ -29,16 +29,16 @@ type Bot struct {
 	RectAll, NewRectAll      func() (image.Rectangle)
 }
 
-func NewBot() (*Bot) {
+func NewBot(device, exec string) (*Bot) {
 	b := Bot{
-		Dev: "",
-		Exec: "adb",
+		Dev: device,
+		Exec: exec,
 		UseSU: true,
 		UsePipe: true,
 
 		Local_tmp_path: "./",
 		Adb_tmp_path:  "/data/local/tmp/",
-		devstr: "",
+//		devstr: "",
 
 		Rect: NewRect,
 		RectAbs: NewRectAbs,
@@ -50,19 +50,17 @@ func NewBot() (*Bot) {
 	b.NewRectAbs = NewRectAbs
 	b.NewRectAll = NewRectAll
 
-	return &b
-}
-
-func (b Bot) SetDev(device string) {
-	b.Dev = device
 	if device != "" {
 		b.devstr = " -s " + device
 	} else {
 		b.devstr = ""
 	}
+
+	return &b
 }
 
 func (b Bot) Run(parts string) ([]byte, error) {
+	Vlogln(5, "Bot = ", b)
 	return Cmd(b.Exec + b.devstr + " " + parts)
 }
 
