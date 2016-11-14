@@ -22,6 +22,8 @@ var verbosity = flag.Int("v", 2, "verbosity")
 var ADB = flag.String("adb", "adb", "adb exec path")
 var DEV = flag.String("dev", "", "select device")
 
+var OnDevice = flag.Bool("od", true, "run on device")
+
 var APP = flag.String("app", "com.android.vending", "app package name")
 var TMPL = flag.String("tmpl", "tmpl.png", "app package name")
 
@@ -34,9 +36,11 @@ func main() {
 	adbbot.Verbosity = *verbosity
 	bot := adbbot.NewBot(*DEV, *ADB)
 
+	// run on android by adb user(shell)
+	bot.IsOnDevice = *OnDevice
 
 	Vlogln(2, "[adb]", "wait-for-device")
-	_, err := bot.Run("wait-for-device")
+	_, err := bot.Adb("wait-for-device")
 	if err != nil {
 		Vlogln(1, "adb err", err)
 	}
@@ -46,6 +50,9 @@ func main() {
 
 	// start APP
 	bot.StartApp(*APP)
+
+	// wait
+	time.Sleep(time.Millisecond * 10000)
 
 
 	// create matching region between Point <100,635> and <9999,9999>
