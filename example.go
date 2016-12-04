@@ -16,7 +16,7 @@ var DEV = flag.String("dev", "", "select device")
 var OnDevice = flag.Bool("od", true, "run on device")
 
 var APP = flag.String("app", "com.android.vending", "app package name")
-var TMPL = flag.String("tmpl", "tmpl.png", "app package name")
+var TMPL = flag.String("tmpl", "tmpl.png", "template image")
 
 func main() {
 
