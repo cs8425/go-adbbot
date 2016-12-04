@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"time"
 
-	"../adbbot"
+	"./adbbot"
 )
 
 var verbosity = flag.Int("v", 3, "verbosity")
@@ -14,7 +14,10 @@ var ADB = flag.String("adb", "adb", "adb exec path")
 var DEV = flag.String("dev", "", "select device")
 
 var TMPL = flag.String("t", "tmpl.png", "template image")
-var IN = flag.String("i", "", "input image, empty use screencap")
+var IN = flag.String("i", "", "input image")
+
+var sizeX = flag.Int("sizeX", 448, "sizeX")
+var sizeY = flag.Int("sizeY", 816, "sizeY")
 
 func main() {
 
@@ -24,6 +27,9 @@ func main() {
 
 	adbbot.Verbosity = *verbosity
 	bot := adbbot.NewBot(*DEV, *ADB)
+	if *sizeX > 0 && *sizeY > 0{
+		bot.ScriptScreen(0,0, *sizeX, *sizeY)
+	}
 
 
 	t := time.Now()
@@ -37,9 +43,8 @@ func main() {
 
 		if *IN == "" {
 
-			// try to find target
-			// 10 times with 1000ms delay between each search
-			x, y, val := bot.FindExistReg(tmpl, 1, 0)
+			// try to find target once
+			x, y, val := bot.FindExistReg(tmpl, 2, 0)
 			if x == -1 && y == -1 {
 				Vlogln(2, "template not found", x, y, val)
 			} else {

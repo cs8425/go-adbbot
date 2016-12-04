@@ -20,6 +20,9 @@ type Bot struct {
 
 	Last_screencap  image.Image
 
+	Screen          *image.Rectangle
+	TargetScreen    *image.Rectangle
+
 	devstr          string
 	width           int
 	height          int
@@ -43,6 +46,9 @@ func NewBot(device, exec string) (*Bot) {
 		Adb_tmp_path:  "/data/local/tmp/",
 		IsOnDevice: false,
 //		devstr: "",
+
+		Screen: nil,
+		TargetScreen: nil,
 
 		Rect: NewRect,
 		RectAbs: NewRectAbs,
@@ -73,7 +79,7 @@ func NewBotOnDevice() (*Bot) {
 	return b
 }
 
-func (b Bot) Adb(parts string) ([]byte, error) {
+func (b *Bot) Adb(parts string) ([]byte, error) {
 	if b.IsOnDevice {
 		// nop
 		return []byte{}, nil
@@ -82,7 +88,7 @@ func (b Bot) Adb(parts string) ([]byte, error) {
 	}
 }
 
-func (b Bot) Shell(parts string) ([]byte, error) {
+func (b *Bot) Shell(parts string) ([]byte, error) {
 	if b.IsOnDevice {
 		cmd := []string{"-c", parts}
 		return exec.Command("sh", cmd...).Output()
@@ -91,7 +97,7 @@ func (b Bot) Shell(parts string) ([]byte, error) {
 	}
 }
 
-func (b Bot) Pipe(parts string) ([]byte, error) {
+func (b *Bot) Pipe(parts string) ([]byte, error) {
 	if b.IsOnDevice {
 		return Cmd(parts)
 	} else {
@@ -99,7 +105,7 @@ func (b Bot) Pipe(parts string) ([]byte, error) {
 	}
 }
 
-func (b Bot) Screencap() (img image.Image, err error){
+func (b *Bot) Screencap() (img image.Image, err error){
 	var screencap []byte
 
 	if b.UsePipe {
@@ -108,6 +114,8 @@ func (b Bot) Screencap() (img image.Image, err error){
 		screencap, err = b.screencap_file()
 	}
 
+	Vlogln(5, "screen", b.width, b.height, b.Screen)
+
 	b.width = int(binary.LittleEndian.Uint32(screencap[0:4]))
 	b.height = int(binary.LittleEndian.Uint32(screencap[4:8]))
 
@@ -115,6 +123,11 @@ func (b Bot) Screencap() (img image.Image, err error){
 	Vlogln(5, "width = ", b.width)
 	Vlogln(5, "length = ", len(screencap[12:]))
 //	Vlogln(5, "dump = ", screencap[12:52])
+
+	if b.Screen == nil {
+		b.Screen = &image.Rectangle{image.Pt(0, 0), image.Pt(b.width, b.height)}
+		Vlogln(6, "set screen", b.width, b.height, b.Screen)
+	}
 
 	img = &image.NRGBA{
 		Pix: screencap[12:],
@@ -129,7 +142,7 @@ func (b Bot) Screencap() (img image.Image, err error){
 	return img, err
 }
 
-func (b Bot) screencap_file() ([]byte, error){
+func (b *Bot) screencap_file() ([]byte, error){
 
 	if b.UseSU {
 		_, err := b.Shell("su -c screencap /dev/screencap-tmp.raw")
@@ -163,6 +176,11 @@ func (b Bot) screencap_file() ([]byte, error){
 	return screencap, nil
 }
 
+
+func (b *Bot) ScriptScreen(x0, y0, dx, dy int) () {
+	b.TargetScreen = &image.Rectangle{image.Pt(x0, y0), image.Pt(dx, dy)}
+	Vlogln(3, "set Script Screen", x0, y0, dx, dy, b.TargetScreen)
+}
 
 func (b Bot) Click(loc image.Point) (err error){
 	_, err = b.Shell("input tap " + strconv.Itoa(loc.X) + " " + strconv.Itoa(loc.Y))
@@ -216,7 +234,7 @@ func (b Bot) KillApp(app string) (err error){
 	return
 }
 
-func (b Bot) SaveScreen(imagefile string) (err error){
+func (b *Bot) SaveScreen(imagefile string) (err error){
 	img, err := b.Screencap()
 	if err != nil {
 		return

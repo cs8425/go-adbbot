@@ -36,7 +36,19 @@ func (b Bot) FindExistReg(tmpl *Tmpl, times int, delay int) (x int, y int, val f
 
 		Vlogln(4, "FindP()", i)
 		timeStart()
-		x, y, val = FindP(img, tmpl.Image)
+		if b.TargetScreen != nil {
+			scriptsize := b.TargetScreen.Size()
+			screensize := b.Screen.Size()
+			tmplsize := tmpl.Image.Bounds().Size()
+			newX := tmplsize.X * screensize.X / scriptsize.X
+			newY := tmplsize.Y * screensize.Y / scriptsize.Y
+			Vlogln(5, "Resize to", newX, newY)
+			dstImage := Resize(tmpl.Image, newX, newY, Lanczos)
+			timeEnd("Resize()")
+			x, y, val = FindP(img, dstImage)
+		} else {
+			x, y, val = FindP(img, tmpl.Image)
+		}
 		timeEnd("FindP()")
 		if x != -1 && y != -1 {
 			Vlogln(3, "FindExistP()", x, y, val)

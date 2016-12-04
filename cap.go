@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"time"
 
-	"../adbbot"
+	"./adbbot"
 )
 
 var verbosity = flag.Int("v", 3, "verbosity")
