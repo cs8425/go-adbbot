@@ -33,6 +33,10 @@ type Bot struct {
 	Rect, NewRect            func(x, y, xp, yp int) (image.Rectangle)
 	RectAbs, NewRectAbs      func(x, y, x2, y2 int) (image.Rectangle)
 	RectAll, NewRectAll      func() (image.Rectangle)
+
+//	Adb             func(parts string) ([]byte, error)
+//	Shell           func(parts string) ([]byte, error)
+//	Pipe            func(parts string) ([]byte, error)
 }
 
 func NewBot(device, exec string) (*Bot) {
@@ -114,7 +118,7 @@ func (b *Bot) Screencap() (img image.Image, err error){
 		screencap, err = b.screencap_file()
 	}
 
-	Vlogln(5, "screen", b.width, b.height, b.Screen)
+	Vlogln(5, "screen", b.width, b.height, b.Screen, b.TargetScreen)
 
 	b.width = int(binary.LittleEndian.Uint32(screencap[0:4]))
 	b.height = int(binary.LittleEndian.Uint32(screencap[4:8]))
@@ -126,7 +130,10 @@ func (b *Bot) Screencap() (img image.Image, err error){
 
 	if b.Screen == nil {
 		b.Screen = &image.Rectangle{image.Pt(0, 0), image.Pt(b.width, b.height)}
-		Vlogln(6, "set screen", b.width, b.height, b.Screen)
+//		b.Screen = new(image.Rectangle)
+//		b.Screen.Min = image.Pt(0, 0)
+//		b.Screen.Max = image.Pt(b.width, b.height)
+		Vlogln(5, "set screen", b.width, b.height, b.Screen)
 	}
 
 	img = &image.NRGBA{
@@ -179,15 +186,36 @@ func (b *Bot) screencap_file() ([]byte, error){
 
 func (b *Bot) ScriptScreen(x0, y0, dx, dy int) () {
 	b.TargetScreen = &image.Rectangle{image.Pt(x0, y0), image.Pt(dx, dy)}
-	Vlogln(3, "set Script Screen", x0, y0, dx, dy, b.TargetScreen)
+	Vlogln(4, "set Script Screen", x0, y0, dx, dy, b.TargetScreen)
 }
 
-func (b Bot) Click(loc image.Point) (err error){
+func (b *Bot) Remap(loc image.Point) (image.Point){
+	x := loc.X
+	y := loc.Y
+	Vlogln(4, "Remap", b.TargetScreen, b.Screen)
+	if b.TargetScreen != nil && b.Screen != nil {
+		scriptsize := b.TargetScreen.Size()
+		screensize := b.Screen.Size()
+		x = x * screensize.X / scriptsize.X
+		y = y * screensize.X / scriptsize.X
+		Vlogln(4, "Remap to", x, y)
+	}
+	return image.Pt(x, y)
+}
+
+func (b *Bot) Click(loc image.Point, remap bool) (err error){
+	if remap {
+		loc = b.Remap(loc)
+	}
 	_, err = b.Shell("input tap " + strconv.Itoa(loc.X) + " " + strconv.Itoa(loc.Y))
 	return
 }
 
-func (b Bot) Swipe(p0,p1 image.Point) (err error){
+func (b *Bot) Swipe(p0,p1 image.Point, remap bool) (err error){
+	if remap {
+		p0 = b.Remap(p0)
+		p1 = b.Remap(p1)
+	}
 	_, err = b.Shell("input swipe " + strconv.Itoa(p0.X) + " " + strconv.Itoa(p0.Y) + " " + strconv.Itoa(p1.X) + " " + strconv.Itoa(p1.Y))
 	return
 }

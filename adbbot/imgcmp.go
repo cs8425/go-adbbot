@@ -19,7 +19,7 @@ func abs(a, b uint8) (int64){
 	return c * c
 }
 
-func (b Bot) FindExistReg(tmpl *Tmpl, times int, delay int) (x int, y int, val float64){
+func (b *Bot) FindExistReg(tmpl *Tmpl, times int, delay int) (x int, y int, val float64){
 
 	for i := 0; i < times; i++ {
 		Vlogln(4, "Screencap()", i)
@@ -30,7 +30,27 @@ func (b Bot) FindExistReg(tmpl *Tmpl, times int, delay int) (x int, y int, val f
 
 		if !tmpl.Region.Empty() {
 			Vlogln(4, "crop", i)
-			reg := img.Bounds().Intersect(tmpl.Region)
+			var reg image.Rectangle
+			if b.TargetScreen != nil {
+				scriptsize := b.TargetScreen.Size()
+				screensize := b.Screen.Size()
+				reg = tmpl.Region
+				newMinX := reg.Min.X * screensize.X / scriptsize.X
+				newMaxX := reg.Max.X * screensize.X / scriptsize.X
+				newMinY := reg.Min.Y * screensize.Y / scriptsize.Y
+				newMaxY := reg.Max.Y * screensize.Y / scriptsize.Y
+				reg = image.Rect(newMinX, newMinY, newMaxX, newMaxY)
+				/*scaleX := float32(screensize.X) / float32(scriptsize.X)
+				scaleY := float32(screensize.Y) / float32(scriptsize.Y)
+				newMinX := int(float32(reg.Min.X) * scaleX)
+				newMaxX := int(float32(reg.Max.X) * scaleX)
+				newMinY := int(float32(reg.Min.Y) * scaleY)
+				newMaxY := int(float32(reg.Max.Y) * scaleY)
+				Vlogln(5, "crop Resize", scaleX, scaleY)*/
+				Vlogln(5, "crop Resize to", reg)
+			} else {
+				reg = img.Bounds().Intersect(tmpl.Region)
+			}
 			img = img.(*image.NRGBA).SubImage(reg)
 		}
 
@@ -42,10 +62,14 @@ func (b Bot) FindExistReg(tmpl *Tmpl, times int, delay int) (x int, y int, val f
 			tmplsize := tmpl.Image.Bounds().Size()
 			newX := tmplsize.X * screensize.X / scriptsize.X
 			newY := tmplsize.Y * screensize.Y / scriptsize.Y
-			Vlogln(5, "Resize to", newX, newY)
-			dstImage := Resize(tmpl.Image, newX, newY, Lanczos)
-			timeEnd("Resize()")
-			x, y, val = FindP(img, dstImage)
+			if (screensize.X == scriptsize.X) && (screensize.Y == scriptsize.Y) {
+				x, y, val = FindP(img, tmpl.Image)
+			} else {
+				Vlogln(5, "Resize to", newX, newY)
+				dstImage := Resize(tmpl.Image, newX, 0, Lanczos)
+				timeEnd("Resize()")
+				x, y, val = FindP(img, dstImage)
+			}
 		} else {
 			x, y, val = FindP(img, tmpl.Image)
 		}
@@ -61,7 +85,7 @@ func (b Bot) FindExistReg(tmpl *Tmpl, times int, delay int) (x int, y int, val f
 	return
 }
 
-func (b Bot) FindExistP(subimg image.Image, times int, delay int) (x int, y int, val float64){
+func (b *Bot) FindExistP(subimg image.Image, times int, delay int) (x int, y int, val float64){
 
 	for i := 0; i < times; i++ {
 		Vlogln(4, "Screencap()", i)
