@@ -252,6 +252,10 @@ func (b Bot) KeySwitch() (error){
 	return b.Keyevent("KEYCODE_APP_SWITCH")
 }
 
+func (b Bot) KeyPower() (error){
+	return b.Keyevent("KEYCODE_POWER")
+}
+
 func (b Bot) StartApp(app string) (err error){
 	_, err = b.Shell("monkey -p " + app + " -c android.intent.category.LAUNCHER 1")
 	return
