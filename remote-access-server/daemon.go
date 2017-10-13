@@ -24,6 +24,8 @@ var OnDevice = flag.Bool("od", false, "run on device")
 
 var bindAddr = flag.String("l", ":6900", "")
 
+var reflash = flag.Int("r", 1000, "update screen minimum time (ms)")
+
 func main() {
 
 	log.SetFlags(log.Ldate|log.Ltime)
@@ -163,7 +165,7 @@ func screencap(bot *adbbot.Bot, screen *[]byte) {
 		CompressionLevel: png.NoCompression,
 	}
 
-	limit := 1000 * time.Millisecond
+	limit := time.Duration(*reflash) * time.Millisecond
 
 	for {
 		start := time.Now()

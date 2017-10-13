@@ -3,7 +3,7 @@ package main
 
 import (
 	"io"
-	"io/ioutil"
+//	"io/ioutil"
 	"net"
 	"net/http"
 //	"syscall"
@@ -43,34 +43,62 @@ func ws(w http.ResponseWriter, r *http.Request) {
 		Vln(2, "upgrade:", err)
 		return
 	}
+	defer c.Close()
+
 	newclients <- c
 
-/*	defer c.Close()
-
 	for {
-		mt, message, err := c.ReadMessage()
+		mt, msgb, err := c.ReadMessage()
 		if err != nil {
 			Vln(2, "read:", err)
 			break
 		}
-		Vf(3, "recv: %s", mt, message)
-		op := string(message)
-		lines := strings.Split(op, "\n")
+		msg := string(msgb)
+		Vln(4, "[recv]", mt, msg)
+		lines := strings.Split(msg, "\n")
+		if len(lines) < 2 {
+			continue
+		}
 		todo := lines[0]
-	}*/
+
+		switch todo {
+		case "key": // home, back, task, power
+			t := OP {
+				Type: 0,
+				Op: lines[1],
+			}
+			op <- t
+
+		case "move":
+			mvs(lines[1:])
+
+		case "click":
+			d := strings.Split(lines[1], ",")
+			x, err := strconv.ParseInt(d[0], 10, 32)
+			if err != nil {
+				return
+			}
+			y, err := strconv.ParseInt(d[1], 10, 32)
+			if err != nil {
+				return
+			}
+			t := OP {
+				Type: 1,
+				X0: int(x),
+				Y0: int(y),
+			}
+			Vln(3, "[click]", t)
+			op <- t
+		default:
+			Vln(3, "[undef]", todo)
+		}
+	}
 }
 
-func mvs(data io.ReadCloser) {
-	defer data.Close()
-
-	body, err := ioutil.ReadAll(data)
-	Vln(3, "[mvs]", string(body))
-	if err != nil {
-		return
-	}
+func mvs(mvs []string) {
+	Vln(3, "[mvs]", mvs)
 
 	var x0, y0, dt int64
-	mvs := strings.Split(string(body), "\n")
 	for idx, line := range mvs {
 		d := strings.Split(line, ",")
 		x1, err := strconv.ParseInt(d[0], 10, 32)
@@ -94,65 +122,16 @@ func mvs(data io.ReadCloser) {
 			Dt: int(dt),
 		}
 		x0, y0 = x1, y1
+
 		if idx > 0 {
 			op <- t
 		}
 	}
 }
 
-var keymap map[string]string = map[string]string{
-    "/home": "home",
-    "/back": "back",
-    "/task": "task",
-    "/power": "power",
-}
-func keys(w http.ResponseWriter, r *http.Request) {
-	key, ok := keymap[r.URL.Path]
-	if ok {
-		Vf(3, "got key: %v\n", r.URL.Path)
-		t := OP {
-			Type: 0,
-			Op: key,
-		}
-		op <- t
-		io.WriteString(w, r.URL.Path + ", ok")
-	} else {
-		switch r.URL.Path {
-		case "/move":
-			mvs(r.Body)
-
-		case "/click":
-			defer r.Body.Close()
-			line, err := ioutil.ReadAll(r.Body)
-			if err != nil {
-				return
-			}
-			d := strings.Split(string(line), ",")
-			x, err := strconv.ParseInt(d[0], 10, 32)
-			if err != nil {
-				return
-			}
-			y, err := strconv.ParseInt(d[1], 10, 32)
-			if err != nil {
-				return
-			}
-			t := OP {
-				Type: 1,
-				X0: int(x),
-				Y0: int(y),
-			}
-			Vln(3, "[click]", t)
-			op <- t
-
-		default:
-			io.WriteString(w, html)
-		}
-	}
-}
-/*
 func keys(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, html)
-}*/
+}
 
 var newclients chan *websocket.Conn
 var screen chan []byte
@@ -179,42 +158,6 @@ func broacast() {
 }
 
 func pollimg(daemon net.Conn) {
-	var err error
-	var buf []byte
-
-/*	err = WriteTagStr(daemon, "ScreenSize")
-	if err != nil {
-		Vln(2, "error send ScreenSize req", err)
-		return
-	}
-	scX, scY, err := readXY(daemon)
-	if err != nil {
-		Vln(2, "error decode ScreenSize resp", err)
-		return
-	}
-	Vln(2, "[ScreenSize]", scX, scY)*/
-
-	for {
-		start := time.Now()
-		err = WriteTagStr(daemon, "Screencap")
-		if err != nil {
-			Vln(2, "error send screencap req", err)
-			return
-		}
-		buf, err = ReadVTagByte(daemon)
-		if err != nil {
-			Vln(2, "error poll screen", err)
-			return
-		}
-		Vln(3, "poll screen ok", len(buf), time.Since(start))
-
-		screen <- buf
-
-		time.Sleep(2 * 1000 * time.Millisecond)
-	}
-}
-
-func pollimg2(daemon net.Conn) {
 	var err error
 	var buf []byte
 
@@ -289,10 +232,9 @@ func main() {
 		Vln(1, "error connct to", *daemonAddr)
 		return
 	}
-	go pollimg2(poll)
+	go pollimg(poll)
 
 	conn, err := net.Dial("tcp", *daemonAddr)
-//	go pollimg(conn)
 	go pushop(conn)
 	Vln(1, "connct", *daemonAddr, "ok!")
 
@@ -377,7 +319,10 @@ var bindlist = ['home', 'back', 'task', 'power'];
 for(idx in bindlist){
 	var ele = bindlist[idx];
 	(function(ele){
-		$('#' + ele).bind('click', function(e){$.get('/' + ele)});
+		$('#' + ele).bind('click', function(e){
+//			$.get('/' + ele)
+			send('key', ele)
+		});
 	})(ele);
 }
 
@@ -397,12 +342,18 @@ var now = function() {
     return out;
 }
 
-var scale = 1.0
+
+var pos = {}
 function getXY(e) {
 	var x,y;
 	if(typeof e.touches != 'undefined'){
-		x = e.touches[0].offsetX * scale;
-		y = e.touches[0].offsetY * scale;
+//console.log('getXY()', e.touches, e.touches[0])
+		if(e.touches.length == 0) return [pos.x, pos.y];
+		var t = e.touches[0]
+		var offsetX = t.pageX - img.offsetLeft
+		var offsetY = t.pageY - img.offsetTop
+		x = offsetX * scale;
+		y = offsetY * scale;
 	}else{
 		x = e.offsetX * scale;
 		y = e.offsetY * scale;
@@ -410,10 +361,16 @@ function getXY(e) {
     return [x,y];
 }
 
+function send(type, data) {
+	if(!ws) return
+
+	var out = type + '\n' + data
+	ws.send(out)
+}
+
 
 var isdrag = false;
 var t = null;
-var pos = {};
 var queue = [];
 var delaypost = null;
 var mousemove = function(){
@@ -427,22 +384,27 @@ var mousemove = function(){
 		out += Math.round(dx) + ',' + Math.round(dy) + ',' + Math.round(dt) + '\n';
 	}
 //	console.log('move', out);
-	$.post('/move', out, null, 'text');
+//	$.post('/move', out, null, 'text');
+	send('move', out)
 	queue = [];
 }
 
 var img = document.querySelector('#screen')
 $('#screen').bind('mousedown touchstart', function(e){
+	e.preventDefault()
 	isdrag = true;
 	t = new Date();
 
 	var xy = getXY(e)
 	var x = xy[0]
 	var y = xy[1]
+	pos.x = x
+	pos.y = y
 
 	queue.push([x, y, 0]);
 
 }).bind('mouseup touchend', function(e){
+	e.preventDefault()
 	isdrag = false;
 	var dt = (new Date()) - t
 
@@ -453,43 +415,43 @@ $('#screen').bind('mousedown touchstart', function(e){
 	queue.push([x, y, dt])
 	mousemove()
 
-/*	if(dt > 120) {
-		queue.push([x, y, dt])
+	if(dt > 120) {
+//		queue.push([x, y, dt])
+//		mousemove()
 //		if(!delaypost) delaypost = setTimeout(mousemove, 50);
-		mousemove()
 	} else {
 		queue = []
 		console.log('click', x, y)
 		var out = x + ',' + y
-		$.post('/click', out, null, 'text');
-	}*/
+//		$.post('/click', out, null, 'text');
+	}
 }).bind('mousemove touchmove', function(e){
 	if(!isdrag) return;
-	e.preventDefault();
-/*	var xy = getXY(e)
+	e.preventDefault()
+	var xy = getXY(e)
 	var x = xy[0]
 	var y = xy[1]
-	queue.push([x, y]);
+	pos.x = x
+	pos.y = y
+/*	queue.push([x, y]);
 
 	if(!delaypost) delaypost = setTimeout(mousemove, 50);*/
 }).bind('click', function(e){
-	if(((new Date()) - t) > 120) return
+	e.preventDefault()
+//	if(((new Date()) - t) > 120) return
 
 	var xy = getXY(e)
 	var x = xy[0]
 	var y = xy[1]
 
-/*	var x1 = e.offsetX ? (e.offsetX):(e.pageX-img.offsetLeft);
-	var y1 = e.offsetY ? (e.offsetY):(e.pageY-img.offsetTop);
-console.log('click2', x1, y1)*/
-console.log('click', x, y, e)
+console.log('click1', x, y, e)
 
 
 //	var out = x + ',' + y
 //	$.post('/click', out, null, 'text');
 });
 
-var dd,dd2
+var scale = 1.0
 var ws;
 $(document).ready(function(e) {
 
@@ -502,7 +464,7 @@ $(document).ready(function(e) {
 	var data;
 	img.onload = function(e) {
 		var img = e.target
-		var url = e.target.src
+		var url = img.src
 		scale = img.naturalWidth / img.width
 		revokeObjectURL(url)
 //		console.log(now(), 'Freeing blob...', url)
@@ -516,12 +478,11 @@ $(document).ready(function(e) {
 		ws = new WebSocket('ws://'+window.location.host+'/ws');
 		ws.onopen = function(e) {
 			console.log("OPEN", e)
-			ws.send('echo .... ');
 		}
 		ws.onclose = function(e) {
 			console.log("CLOSE", e)
 			ws = null;
-			setTimeout(open, 1500)
+			setTimeout(open, 2500)
 		}
 		ws.onmessage = function(e) {
 			// console.log("RESPONSE", e)
@@ -536,20 +497,6 @@ $(document).ready(function(e) {
 			img.src = data
 //			console.log(now(), 'New screen', data)
 
-
-/*			var fileReader = new FileReader()
-			fileReader.onload = function() {
-				var imgBuf = new Uint8Array(this.result)
-				var cxtImg = ctx.getImageData(0, 0, W, H)
-				var pix = cxtImg.data
-				for(var i=0; i<pix.length; i++){
-					pix[i] = imgBuf[i]
-				}
-				ctx.putImageData(cxtImg, 0, 0)
-//				dd = pix
-//				dd2 = imgBuf
-			};
-			fileReader.readAsArrayBuffer(e.data)*/
 		}
 		ws.onerror = function(e) {
 			console.log("ERROR", e)
