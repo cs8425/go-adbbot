@@ -220,6 +220,15 @@ func (b *Bot) Swipe(p0,p1 image.Point, remap bool) (err error){
 	return
 }
 
+func (b *Bot) SwipeT(p0,p1 image.Point, time int, remap bool) (err error){
+	if remap {
+		p0 = b.Remap(p0)
+		p1 = b.Remap(p1)
+	}
+	_, err = b.Shell("input swipe " + strconv.Itoa(p0.X) + " " + strconv.Itoa(p0.Y) + " " + strconv.Itoa(p1.X) + " " + strconv.Itoa(p1.Y) + " " + strconv.Itoa(time))
+	return
+}
+
 func (b Bot) Text(in string) (err error){
 	_, err = b.Shell("input text " + in)
 	return
