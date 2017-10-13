@@ -54,7 +54,7 @@ func ws(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		msg := string(msgb)
-		Vln(4, "[recv]", mt, msg)
+		Vln(5, "[recv]", mt, msg)
 		lines := strings.Split(msg, "\n")
 		if len(lines) < 2 {
 			continue
@@ -67,6 +67,7 @@ func ws(w http.ResponseWriter, r *http.Request) {
 				Type: 0,
 				Op: lines[1],
 			}
+			Vln(3, "[key]", t)
 			op <- t
 
 		case "move":
@@ -153,6 +154,7 @@ func broacast() {
 		for len(newclients) > 0 {
 			client := <-newclients
 			clients[client] = client
+			Vln(3, "[new client]", client.RemoteAddr())
 		}
 	}
 }
@@ -168,10 +170,10 @@ func pollimg(daemon net.Conn) {
 		start := time.Now()
 		buf, err = ReadVTagByte(conn)
 		if err != nil {
-			Vln(2, "error poll screen", err)
+			Vln(2, "[screen][pool]err", err)
 			return
 		}
-		Vln(3, "poll screen ok", len(buf), time.Since(start))
+		Vln(4, "[screen][poll]", len(buf), time.Since(start))
 
 		screen <- buf
 	}
@@ -189,19 +191,14 @@ func pushop(daemon net.Conn) {
 		case 0:
 			err = WriteTagStr(daemon, "Key")
 			if err != nil {
-				Vln(2, "error send key req", err)
+				Vln(2, "[send][Key]err", err, todo)
 				return
 			}
-
-			err = WriteTagStr(daemon, todo.Op)
-			if err != nil {
-				Vln(2, "error send op req", err)
-				return
-			}
+			WriteTagStr(daemon, todo.Op)
 		case 1:
 			err = WriteTagStr(daemon, "Click")
 			if err != nil {
-				Vln(2, "error send Click req", err)
+				Vln(2, "[send][Click]err", err, todo)
 				return
 			}
 			WriteVLen(daemon, int64(todo.X0))
@@ -209,7 +206,7 @@ func pushop(daemon net.Conn) {
 		case 2:
 			err = WriteTagStr(daemon, "Swipe")
 			if err != nil {
-				Vln(2, "error send Click req", err)
+				Vln(2, "[send][Swipe]err", err, todo)
 				return
 			}
 			WriteVLen(daemon, int64(todo.X0))
@@ -320,7 +317,6 @@ for(idx in bindlist){
 	var ele = bindlist[idx];
 	(function(ele){
 		$('#' + ele).bind('click', function(e){
-//			$.get('/' + ele)
 			send('key', ele)
 		});
 	})(ele);
@@ -455,7 +451,6 @@ var scale = 1.0
 var ws;
 $(document).ready(function(e) {
 
-//	var ws;
 	var img = document.querySelector('#screen')
 	var urlCreator = window.URL || window.webkitURL
 	var createObjectURL = urlCreator.createObjectURL
@@ -488,7 +483,6 @@ $(document).ready(function(e) {
 			// console.log("RESPONSE", e)
 			// display screen
 			if (data) {
-//				img.src = ''
 				console.log(now(), "multiload!!", data)
 				revokeObjectURL(data)
 				data = null

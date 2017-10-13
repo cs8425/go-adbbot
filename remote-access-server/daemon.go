@@ -16,7 +16,7 @@ import (
 	"../adbbot"
 )
 
-var verbosity = flag.Int("v", 2, "verbosity")
+var verbosity = flag.Int("v", 3, "verbosity")
 var ADB = flag.String("adb", "adb", "adb exec path")
 var DEV = flag.String("dev", "", "select device")
 
@@ -75,7 +75,7 @@ func handleConn(p1 net.Conn, bot *adbbot.Bot, screen *[]byte) {
 			Vln(2, "[todo]err", err)
 			return
 		}
-		Vln(3, "[todo]", todo)
+		Vln(4, "[todo]", todo)
 
 		switch todo {
 		case "Click":
@@ -84,7 +84,7 @@ func handleConn(p1 net.Conn, bot *adbbot.Bot, screen *[]byte) {
 				Vln(2, "[todo][Click]err", err)
 				return
 			}
-				Vln(2, "[Click]", x, y)
+			Vln(3, "[Click]", x, y)
 			bot.Click(image.Pt(x, y), false)
 		case "Swipe":
 			x0, y0, err := readXY(p1)
@@ -105,7 +105,7 @@ func handleConn(p1 net.Conn, bot *adbbot.Bot, screen *[]byte) {
 				return
 			}
 
-			Vln(2, "[Swipe]", dt, x0, y0, ">>", x1, y1)
+			Vln(3, "[Swipe]", dt, x0, y0, ">>", x1, y1)
 			bot.SwipeT(image.Pt(x0, y0), image.Pt(x1, y1), int(dt), false)
 		case "Key":
 			op, err := ReadTagStr(p1)
@@ -113,6 +113,7 @@ func handleConn(p1 net.Conn, bot *adbbot.Bot, screen *[]byte) {
 				Vln(2, "[todo][Key]err", err)
 				return
 			}
+			Vln(3, "[Key]", op)
 			switch op {
 			case "home":
 				bot.KeyHome()
@@ -131,7 +132,7 @@ func handleConn(p1 net.Conn, bot *adbbot.Bot, screen *[]byte) {
 			//bot.Last_screencap
 			WriteVTagByte(p1, *screen)
 		case "poll":
-			Vln(2, "[todo][poll]", p1)
+			Vln(3, "[todo][poll]", p1)
 			conn := NewCompStream(p1, 1)
 //			conn := NewFlateStream(p1, 1)
 			newclients <- conn
@@ -173,7 +174,7 @@ func screencap(bot *adbbot.Bot, screen *[]byte) {
 		if err != nil {
 			return
 		}
-		Vln(2, "poll screen ok", time.Since(start))
+		Vln(4, "[screen][poll]", time.Since(start))
 
 		encoder.Encode(&buf, bot.Last_screencap)
 		*screen = buf.Bytes()
@@ -187,12 +188,12 @@ func screencap(bot *adbbot.Bot, screen *[]byte) {
 		}
 		*screen = []byte(rawimg.Pix)*/
 
-		Vln(2, "encode screen ok", len(*screen), time.Since(start))
+		Vln(4, "[screen][encode]", len(*screen), time.Since(start))
 
 		for i, c := range clients {
 			err := WriteVTagByte(c, *screen)
 			if err != nil {
-				Vln(2, "write:", err)
+				Vln(2, "[screen][push][err]", err)
 				c.Close()
 				delete(clients, i)
 			}
