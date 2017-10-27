@@ -13,6 +13,8 @@ import (
 	"image"
 	"image/png"
 
+	"fmt"
+
 	"../adbbot"
 )
 
@@ -45,6 +47,9 @@ func main() {
 		return
 	}
 
+	m := NewMonkey(bot, 1080)
+	defer m.Close()
+
 	screen := make([]byte, 0)
 	go screencap(bot, &screen)
 
@@ -62,13 +67,18 @@ func main() {
 			log.Println(err)
 			continue
 		}
-		go handleConn(conn, bot, &screen)
+		go handleConn(conn, bot, &screen, m)
 	}
 
 }
 
 var newclients chan io.ReadWriteCloser
-func handleConn(p1 net.Conn, bot *adbbot.Bot, screen *[]byte) {
+func handleConn(p1 net.Conn, bot *adbbot.Bot, screen *[]byte, m *Monkey) {
+	evmap := make(map[int64]string, 3)
+	evmap[-1] = "up"
+	evmap[0] = "move"
+	evmap[1] = "down"
+
 	for {
 		todo, err := ReadTagStr(p1)
 		if err != nil {
@@ -107,6 +117,21 @@ func handleConn(p1 net.Conn, bot *adbbot.Bot, screen *[]byte) {
 
 			Vln(3, "[Swipe]", dt, x0, y0, ">>", x1, y1)
 			bot.SwipeT(image.Pt(x0, y0), image.Pt(x1, y1), int(dt), false)
+
+		case "Touch":
+			x, y, err := readXY(p1)
+			if err != nil {
+				Vln(2, "[todo][Touch]err", err)
+				return
+			}
+			ev, err := ReadVLen(p1)
+			if err != nil {
+				Vln(2, "[todo][Touch][Ev]err", err)
+				return
+			}
+			Vln(3, "[Touch]", x, y, evmap[ev])
+			m.Touch(image.Pt(x, y), evmap[ev])
+
 		case "Key":
 			op, err := ReadTagStr(p1)
 			if err != nil {
@@ -213,5 +238,72 @@ func Vln(level int, v ...interface{}) {
 	if level <= *verbosity {
 		log.Println(v...)
 	}
+}
+
+type Monkey struct {
+	Port    int
+	conn	net.Conn
+}
+
+func NewMonkey(b *adbbot.Bot, port int) (*Monkey) {
+
+	forwardCmd := fmt.Sprintf("forward tcp:%d tcp:%d", port, port)
+	b.Adb(forwardCmd)
+
+	monkeyCmd := fmt.Sprintf("monkey --port %d", port)
+	go b.Shell(monkeyCmd) // in background
+	time.Sleep(1500 * time.Millisecond)
+
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		Vln(3, "[monkey][conn]err", err)
+	}
+	m := Monkey{
+		Port: port,
+		conn: conn,
+	}
+
+	return &m
+}
+
+func (m *Monkey) Close() (err error){
+	m.conn.Write([]byte("done"))
+	return m.conn.Close()
+}
+
+func (m *Monkey) send(cmd string) (err error){
+	_, err = m.conn.Write([]byte(cmd))
+/*	if err != nil {
+		return
+	}
+	buf := make([]byte, 2)
+	n, err = m.conn.Read(buf)
+*/
+	return
+}
+
+func (m *Monkey) Tap(loc image.Point) (err error){
+	str := fmt.Sprintf("tap %d %d\n", loc.X, loc.Y)
+	err = m.send(str)
+	return
+}
+
+func (m *Monkey) Text(in string) (err error){
+	str := fmt.Sprintf("type %s\n", in)
+	err = m.send(str)
+	return
+}
+
+func (m *Monkey) Press(in string) (err error){
+	str := fmt.Sprintf("press %s\n", in)
+	err = m.send(str)
+	return
+}
+
+func (m *Monkey) Touch(loc image.Point, ty string) (err error){
+	str := fmt.Sprintf("touch %s %d %d\n", ty, loc.X, loc.Y)
+	err = m.send(str)
+	return
 }
 

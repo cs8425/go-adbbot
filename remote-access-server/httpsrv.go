@@ -30,6 +30,7 @@ type OP struct {
 	Op        string
 	X0        int
 	Y0        int
+	Ev        int
 	X1        int
 	Y1        int
 	Dt        int
@@ -99,34 +100,31 @@ func ws(w http.ResponseWriter, r *http.Request) {
 func mvs(mvs []string) {
 	Vln(3, "[mvs]", mvs)
 
-	var x0, y0, dt int64
-	for idx, line := range mvs {
+	var x, y, ev int64
+	var err error
+	for _, line := range mvs {
 		d := strings.Split(line, ",")
-		x1, err := strconv.ParseInt(d[0], 10, 32)
+		x, err = strconv.ParseInt(d[0], 10, 32)
 		if err != nil {
 			return
 		}
-		y1, err := strconv.ParseInt(d[1], 10, 32)
+		y, err = strconv.ParseInt(d[1], 10, 32)
 		if err != nil {
 			return
 		}
-		dt, err = strconv.ParseInt(d[2], 10, 32)
+		ev, err = strconv.ParseInt(d[2], 10, 32)
 		if err != nil {
 			return
 		}
-		t := OP {
-			Type: 2,
-			X0: int(x0),
-			Y0: int(y0),
-			X1: int(x1),
-			Y1: int(y1),
-			Dt: int(dt),
-		}
-		x0, y0 = x1, y1
 
-		if idx > 0 {
-			op <- t
+		t := OP {
+			Type: 3,
+			X0: int(x),
+			Y0: int(y),
+			Ev: int(ev),
 		}
+		Vln(3, "[mv]", t)
+		op <- t
 	}
 }
 
@@ -203,6 +201,7 @@ func pushop(daemon net.Conn) {
 			}
 			WriteVLen(daemon, int64(todo.X0))
 			WriteVLen(daemon, int64(todo.Y0))
+
 		case 2:
 			err = WriteTagStr(daemon, "Swipe")
 			if err != nil {
@@ -214,6 +213,16 @@ func pushop(daemon net.Conn) {
 			WriteVLen(daemon, int64(todo.X1))
 			WriteVLen(daemon, int64(todo.Y1))
 			WriteVLen(daemon, int64(todo.Dt))
+
+		case 3:
+			err = WriteTagStr(daemon, "Touch")
+			if err != nil {
+				Vln(2, "[send][Touch]err", err, todo)
+				return
+			}
+			WriteVLen(daemon, int64(todo.X0))
+			WriteVLen(daemon, int64(todo.Y0))
+			WriteVLen(daemon, int64(todo.Ev))
 		}
 	}
 }
@@ -370,7 +379,7 @@ var t = null;
 var queue = [];
 var delaypost = null;
 var mousemove = function(){
-//	delaypost = setTimeout(mousemove, 50);
+	delaypost = setTimeout(mousemove, 50);
 	if(queue.length == 0) return;
 	var out = '';
 	for(var i=0; i<queue.length; i++){
@@ -380,7 +389,6 @@ var mousemove = function(){
 		out += Math.round(dx) + ',' + Math.round(dy) + ',' + Math.round(dt) + '\n';
 	}
 //	console.log('move', out);
-//	$.post('/move', out, null, 'text');
 	send('move', out)
 	queue = [];
 }
@@ -397,7 +405,9 @@ $('#screen').bind('mousedown touchstart', function(e){
 	pos.x = x
 	pos.y = y
 
-	queue.push([x, y, 0]);
+	queue.push([x, y, 1])
+
+	if(!delaypost) delaypost = setTimeout(mousemove, 50)
 
 }).bind('mouseup touchend', function(e){
 	e.preventDefault()
@@ -408,19 +418,10 @@ $('#screen').bind('mousedown touchstart', function(e){
 	var x = xy[0]
 	var y = xy[1]
 
-	queue.push([x, y, dt])
-	mousemove()
+	queue.push([x, y, -1])
 
-	if(dt > 120) {
-//		queue.push([x, y, dt])
-//		mousemove()
-//		if(!delaypost) delaypost = setTimeout(mousemove, 50);
-	} else {
-		queue = []
-		console.log('click', x, y)
-		var out = x + ',' + y
-//		$.post('/click', out, null, 'text');
-	}
+	if(!delaypost) delaypost = setTimeout(mousemove, 50)
+
 }).bind('mousemove touchmove', function(e){
 	if(!isdrag) return;
 	e.preventDefault()
@@ -429,10 +430,11 @@ $('#screen').bind('mousedown touchstart', function(e){
 	var y = xy[1]
 	pos.x = x
 	pos.y = y
-/*	queue.push([x, y]);
+	queue.push([x, y, 0])
 
-	if(!delaypost) delaypost = setTimeout(mousemove, 50);*/
-}).bind('click', function(e){
+	if(!delaypost) delaypost = setTimeout(mousemove, 50)
+
+})/*.bind('click', function(e){
 	e.preventDefault()
 //	if(((new Date()) - t) > 120) return
 
@@ -442,10 +444,7 @@ $('#screen').bind('mousedown touchstart', function(e){
 
 console.log('click1', x, y, e)
 
-
-//	var out = x + ',' + y
-//	$.post('/click', out, null, 'text');
-});
+});*/
 
 var scale = 1.0
 var ws;
