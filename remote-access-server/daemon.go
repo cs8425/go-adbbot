@@ -74,10 +74,18 @@ func main() {
 
 var newclients chan io.ReadWriteCloser
 func handleConn(p1 net.Conn, bot *adbbot.Bot, screen *[]byte, m *Monkey) {
-	evmap := make(map[int64]string, 3)
-	evmap[-1] = "up"
-	evmap[0] = "move"
-	evmap[1] = "down"
+	evmap := map[int64]string{
+		-1: "up",
+		0: "move",
+		1: "down",
+	}
+
+	keymap := map[string]string{
+		"home": "KEYCODE_HOME",
+		"back": "KEYCODE_BACK",
+		"task": "KEYCODE_APP_SWITCH",
+		"power": "KEYCODE_POWER",
+	}
 
 	for {
 		todo, err := ReadTagStr(p1)
@@ -88,36 +96,6 @@ func handleConn(p1 net.Conn, bot *adbbot.Bot, screen *[]byte, m *Monkey) {
 		Vln(4, "[todo]", todo)
 
 		switch todo {
-		case "Click":
-			x, y, err := readXY(p1)
-			if err != nil {
-				Vln(2, "[todo][Click]err", err)
-				return
-			}
-			Vln(3, "[Click]", x, y)
-			bot.Click(image.Pt(x, y), false)
-		case "Swipe":
-			x0, y0, err := readXY(p1)
-			if err != nil {
-				Vln(2, "[todo][Swipe]err1", err)
-				return
-			}
-
-			x1, y1, err := readXY(p1)
-			if err != nil {
-				Vln(2, "[todo][Swipe]err2", err)
-				return
-			}
-
-			dt, err := ReadVLen(p1)
-			if err != nil {
-				Vln(2, "[dt]err", err)
-				return
-			}
-
-			Vln(3, "[Swipe]", dt, x0, y0, ">>", x1, y1)
-			bot.SwipeT(image.Pt(x0, y0), image.Pt(x1, y1), int(dt), false)
-
 		case "Touch":
 			x, y, err := readXY(p1)
 			if err != nil {
@@ -129,8 +107,13 @@ func handleConn(p1 net.Conn, bot *adbbot.Bot, screen *[]byte, m *Monkey) {
 				Vln(2, "[todo][Touch][Ev]err", err)
 				return
 			}
-			Vln(3, "[Touch]", x, y, evmap[ev])
-			m.Touch(image.Pt(x, y), evmap[ev])
+			evstr, ok := evmap[ev]
+			if !ok {
+				Vln(2, "[todo][Touch][EvCode]err", ev)
+				return
+			}
+			Vln(3, "[Touch]", x, y, evstr)
+			m.Touch(image.Pt(x, y), evstr)
 
 		case "Key":
 			op, err := ReadTagStr(p1)
@@ -138,17 +121,26 @@ func handleConn(p1 net.Conn, bot *adbbot.Bot, screen *[]byte, m *Monkey) {
 				Vln(2, "[todo][Key]err", err)
 				return
 			}
-			Vln(3, "[Key]", op)
-			switch op {
-			case "home":
-				bot.KeyHome()
-			case "back":
-				bot.KeyBack()
-			case "task":
-				bot.KeySwitch()
-			case "power":
-				bot.KeyPower()
+			ev, err := ReadVLen(p1)
+			if err != nil {
+				Vln(2, "[todo][Key][Ev]err", err)
+				return
 			}
+
+			evstr, ok := evmap[ev]
+			if !ok {
+				Vln(2, "[todo][Key][EvCode]err", ev)
+				return
+			}
+			Vln(3, "[Key]", evstr)
+
+			keycode, ok := keymap[op]
+			if !ok {
+				Vln(2, "[todo][Key][Code]err", op)
+				return
+			}
+			m.Key(keycode, evstr)
+
 		case "ScreenSize":
 			WriteVLen(p1, int64(bot.Screen.Dx()))
 			WriteVLen(p1, int64(bot.Screen.Dy()))
@@ -252,12 +244,16 @@ func NewMonkey(b *adbbot.Bot, port int) (*Monkey) {
 
 	monkeyCmd := fmt.Sprintf("monkey --port %d", port)
 	go b.Shell(monkeyCmd) // in background
-	time.Sleep(1500 * time.Millisecond)
+
 
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
+
+TRYCONN:
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
 		Vln(3, "[monkey][conn]err", err)
+		time.Sleep(1000 * time.Millisecond)
+		goto TRYCONN
 	}
 	m := Monkey{
 		Port: port,
@@ -297,6 +293,12 @@ func (m *Monkey) Text(in string) (err error){
 
 func (m *Monkey) Press(in string) (err error){
 	str := fmt.Sprintf("press %s\n", in)
+	err = m.send(str)
+	return
+}
+
+func (m *Monkey) Key(in string, ty string) (err error){
+	str := fmt.Sprintf("key %s %s\n", ty, in)
 	err = m.send(str)
 	return
 }

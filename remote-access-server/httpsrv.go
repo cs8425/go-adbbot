@@ -26,14 +26,11 @@ var daemonAddr = flag.String("t", "127.0.0.1:6900", "")
 var verbosity = flag.Int("v", 3, "verbosity")
 
 type OP struct {
-	Type      int	// 0 >> Key, 1 >> Click, 2 >> Swipe
+	Type      int	// 0 >> Key, 1 >> touch
 	Op        string
 	X0        int
 	Y0        int
 	Ev        int
-	X1        int
-	Y1        int
-	Dt        int
 }
 
 var upgrader = websocket.Upgrader{} // use default options
@@ -61,12 +58,18 @@ func ws(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		todo := lines[0]
+		Vln(4, "[lines]", lines)
 
 		switch todo {
 		case "key": // home, back, task, power
+			ev, err := strconv.ParseInt(lines[2], 10, 32)
+			if err != nil {
+				continue
+			}
 			t := OP {
 				Type: 0,
 				Op: lines[1],
+				Ev: int(ev),
 			}
 			Vln(3, "[key]", t)
 			op <- t
@@ -74,23 +77,6 @@ func ws(w http.ResponseWriter, r *http.Request) {
 		case "move":
 			mvs(lines[1:])
 
-		case "click":
-			d := strings.Split(lines[1], ",")
-			x, err := strconv.ParseInt(d[0], 10, 32)
-			if err != nil {
-				return
-			}
-			y, err := strconv.ParseInt(d[1], 10, 32)
-			if err != nil {
-				return
-			}
-			t := OP {
-				Type: 1,
-				X0: int(x),
-				Y0: int(y),
-			}
-			Vln(3, "[click]", t)
-			op <- t
 		default:
 			Vln(3, "[undef]", todo)
 		}
@@ -98,7 +84,7 @@ func ws(w http.ResponseWriter, r *http.Request) {
 }
 
 func mvs(mvs []string) {
-	Vln(3, "[mvs]", mvs)
+	Vln(4, "[mvs]", mvs)
 
 	var x, y, ev int64
 	var err error
@@ -118,12 +104,12 @@ func mvs(mvs []string) {
 		}
 
 		t := OP {
-			Type: 3,
+			Type: 1,
 			X0: int(x),
 			Y0: int(y),
 			Ev: int(ev),
 		}
-		Vln(3, "[mv]", t)
+		Vln(5, "[mv]", t)
 		op <- t
 	}
 }
@@ -193,28 +179,9 @@ func pushop(daemon net.Conn) {
 				return
 			}
 			WriteTagStr(daemon, todo.Op)
+			WriteVLen(daemon, int64(todo.Ev))
+
 		case 1:
-			err = WriteTagStr(daemon, "Click")
-			if err != nil {
-				Vln(2, "[send][Click]err", err, todo)
-				return
-			}
-			WriteVLen(daemon, int64(todo.X0))
-			WriteVLen(daemon, int64(todo.Y0))
-
-		case 2:
-			err = WriteTagStr(daemon, "Swipe")
-			if err != nil {
-				Vln(2, "[send][Swipe]err", err, todo)
-				return
-			}
-			WriteVLen(daemon, int64(todo.X0))
-			WriteVLen(daemon, int64(todo.Y0))
-			WriteVLen(daemon, int64(todo.X1))
-			WriteVLen(daemon, int64(todo.Y1))
-			WriteVLen(daemon, int64(todo.Dt))
-
-		case 3:
 			err = WriteTagStr(daemon, "Touch")
 			if err != nil {
 				Vln(2, "[send][Touch]err", err, todo)
@@ -325,9 +292,13 @@ var bindlist = ['home', 'back', 'task', 'power'];
 for(idx in bindlist){
 	var ele = bindlist[idx];
 	(function(ele){
-		$('#' + ele).bind('click', function(e){
-			send('key', ele)
-		});
+		$('#' + ele).bind('mousedown touchstart', function(e){
+			e.preventDefault()
+			send('key', ele + '\n1')
+		}).bind('mouseup touchend', function(e){
+			e.preventDefault()
+			send('key', ele + '\n-1')
+		})
 	})(ele);
 }
 
@@ -434,17 +405,7 @@ $('#screen').bind('mousedown touchstart', function(e){
 
 	if(!delaypost) delaypost = setTimeout(mousemove, 50)
 
-})/*.bind('click', function(e){
-	e.preventDefault()
-//	if(((new Date()) - t) > 120) return
-
-	var xy = getXY(e)
-	var x = xy[0]
-	var y = xy[1]
-
-console.log('click1', x, y, e)
-
-});*/
+})
 
 var scale = 1.0
 var ws;
