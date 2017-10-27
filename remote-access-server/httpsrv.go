@@ -456,6 +456,17 @@ $(document).ready(function(e) {
 	var createObjectURL = urlCreator.createObjectURL
 	var revokeObjectURL = urlCreator.revokeObjectURL
 
+	var lastFrame = null
+	var updateFrame = function(){
+		if (data) {
+			console.log(now(), "multiload!!", data)
+			revokeObjectURL(data)
+			data = null
+		}
+		data = createObjectURL( lastFrame )
+		img.src = data
+	}
+
 	var data;
 	img.onload = function(e) {
 		var img = e.target
@@ -482,15 +493,9 @@ $(document).ready(function(e) {
 		ws.onmessage = function(e) {
 			// console.log("RESPONSE", e)
 			// display screen
-			if (data) {
-				console.log(now(), "multiload!!", data)
-				revokeObjectURL(data)
-				data = null
-			}
-			data = createObjectURL( e.data )
-			img.src = data
-//			console.log(now(), 'New screen', data)
-
+			lastFrame = e.data
+			requestAnimationFrame(updateFrame)
+//			console.log(now(), 'New screen', lastFrame)
 		}
 		ws.onerror = function(e) {
 			console.log("ERROR", e)
