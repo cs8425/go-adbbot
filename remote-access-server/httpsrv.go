@@ -23,6 +23,8 @@ import (
 var localAddr = flag.String("l", ":5800", "")
 var daemonAddr = flag.String("t", "127.0.0.1:6900", "")
 
+var wsComp = flag.Bool("comp", false, "ws compression")
+
 var verbosity = flag.Int("v", 3, "verbosity")
 
 type OP struct {
@@ -33,7 +35,7 @@ type OP struct {
 	Ev        int
 }
 
-var upgrader = websocket.Upgrader{} // use default options
+var upgrader = websocket.Upgrader{ EnableCompression: false } // use default options
 
 func ws(w http.ResponseWriter, r *http.Request) {
 	c, err := upgrader.Upgrade(w, r, nil)
@@ -118,26 +120,46 @@ func keys(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, html)
 }
 
+
+type Wsclient struct {
+	*websocket.Conn
+	data chan []byte
+}
+func (c *Wsclient) Send(buf []byte) {
+	select {
+	case <- c.data:
+	default:
+	}
+	c.data <- buf
+}
+func (c *Wsclient) worker() {
+	for {
+		buf := <- c.data
+		err := c.WriteMessage(websocket.BinaryMessage, buf)
+		if err != nil {
+			c.Close()
+			return
+		}
+	}
+}
+
 var newclients chan *websocket.Conn
 var screen chan []byte
 func broacast() {
 	newclients = make(chan *websocket.Conn, 16)
 	screen = make(chan []byte, 1)
-	clients := make(map[*websocket.Conn]*websocket.Conn, 0)
+	clients := make(map[*Wsclient]*Wsclient, 0)
 
 	for {
 		img := <- screen
-		for i, c := range clients {
-			err := c.WriteMessage(websocket.BinaryMessage, img)
-			if err != nil {
-				Vln(2, "write:", err)
-				c.Close()
-				delete(clients, i)
-			}
+		for _, c := range clients {
+			c.Send(img)
 		}
 		for len(newclients) > 0 {
 			client := <-newclients
-			clients[client] = client
+			c := &Wsclient{ client, make(chan []byte, 1) }
+			go c.worker()
+			clients[c] = c
 			Vln(3, "[new client]", client.RemoteAddr())
 		}
 	}
@@ -159,6 +181,10 @@ func pollimg(daemon net.Conn) {
 		}
 		Vln(4, "[screen][poll]", len(buf), time.Since(start))
 
+		select {
+		case <- screen:
+		default:
+		}
 		screen <- buf
 	}
 }
@@ -198,6 +224,8 @@ func main() {
 	flag.Parse()
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
+	upgrader.EnableCompression = *wsComp
+	Vf(1, "ws EnableCompression = %v\n", *wsComp)
 	Vf(1, "server Listen @ %v\n", *localAddr)
 
 	poll, err := net.Dial("tcp", *daemonAddr)
@@ -252,13 +280,10 @@ var html = `<!doctype html>
 <script src="//code.jquery.com/jquery-3.1.0.min.js"></script>
 <style>
 html, body {
-	height: 100%;
-	margin: 0px;
+	margin: 2px;
 }
 body > div {
-	float: left;
-	width: 50%;
-	height: 10%;
+	height: 10vh;
 }
 #screen {
     width: auto;
@@ -276,15 +301,12 @@ button {
 </style>
 </head>
 <body>
-	<div>
-		<div id="btns">
-			<button id="back">◁</button>
-			<button id="home">◯</button>
-			<button id="task">▢</button>
-			<button id="power">⏻⏼</button>
-		</div>
-		<img id="screen" />
-		<canvas id="screen_holder"></canvas>
+	<img id="screen" />
+	<div id="btns">
+		<button id="back">◁</button>
+		<button id="home">◯</button>
+		<button id="task">▢</button>
+		<button id="power">⏻⏼</button>
 	</div>
 </body>
 <script type="text/javascript">
@@ -418,13 +440,8 @@ $(document).ready(function(e) {
 
 	var lastFrame = null
 	var updateFrame = function(){
-		if (data) {
-			console.log(now(), "multiload!!", data)
-			revokeObjectURL(data)
-			data = null
-		}
-		data = createObjectURL( lastFrame )
-		img.src = data
+		img.src = createObjectURL( lastFrame )
+		lastFrame = null
 	}
 
 	var data;
@@ -453,8 +470,12 @@ $(document).ready(function(e) {
 		ws.onmessage = function(e) {
 			// console.log("RESPONSE", e)
 			// display screen
+
+			if(!lastFrame) {
+				requestAnimationFrame(updateFrame)
+			}
 			lastFrame = e.data
-			requestAnimationFrame(updateFrame)
+
 //			console.log(now(), 'New screen', lastFrame)
 		}
 		ws.onerror = function(e) {
