@@ -3,10 +3,8 @@ package main
 
 import (
 	"io"
-//	"io/ioutil"
 	"net"
 	"net/http"
-//	"syscall"
 
 	"log"
 	"runtime"
@@ -310,20 +308,6 @@ button {
 	</div>
 </body>
 <script type="text/javascript">
-var bindlist = ['home', 'back', 'task', 'power'];
-for(idx in bindlist){
-	var ele = bindlist[idx];
-	(function(ele){
-		$('#' + ele).bind('mousedown touchstart', function(e){
-			e.preventDefault()
-			send('key', ele + '\n1')
-		}).bind('mouseup touchend', function(e){
-			e.preventDefault()
-			send('key', ele + '\n-1')
-		})
-	})(ele);
-}
-
 var pand = function(num) {
     return (num < 10) ? '0' + num : num + '';
 }
@@ -340,6 +324,19 @@ var now = function() {
     return out;
 }
 
+var bindlist = ['home', 'back', 'task', 'power'];
+for(idx in bindlist){
+	var ele = bindlist[idx];
+	(function(ele){
+		$('#' + ele).bind('mousedown touchstart', function(e){
+			e.preventDefault()
+			send('key', ele + '\n1')
+		}).bind('mouseup touchend', function(e){
+			e.preventDefault()
+			send('key', ele + '\n-1')
+		})
+	})(ele);
+}
 
 var pos = {}
 function getXY(e) {
@@ -356,7 +353,7 @@ function getXY(e) {
 		x = e.offsetX * scale;
 		y = e.offsetY * scale;
 	}
-    return [x,y];
+	return [x,y];
 }
 
 function send(type, data) {
@@ -410,6 +407,8 @@ $('#screen').bind('mousedown touchstart', function(e){
 	var xy = getXY(e)
 	var x = xy[0]
 	var y = xy[1]
+	pos.x = x
+	pos.y = y
 
 	queue.push([x, y, -1])
 
@@ -428,6 +427,15 @@ $('#screen').bind('mousedown touchstart', function(e){
 	if(!delaypost) delaypost = setTimeout(mousemove, 50)
 
 })
+$(document).bind('mouseup touchend', function(e){
+	if(!isdrag) return;
+	e.preventDefault()
+	isdrag = false;
+
+	queue.push([pos.x, pos.y, -1])
+
+	if(!delaypost) delaypost = setTimeout(mousemove, 50)
+})
 
 var scale = 1.0
 var ws;
@@ -444,14 +452,12 @@ $(document).ready(function(e) {
 		lastFrame = null
 	}
 
-	var data;
 	img.onload = function(e) {
 		var img = e.target
 		var url = img.src
 		scale = img.naturalWidth / img.width
 		revokeObjectURL(url)
 //		console.log(now(), 'Freeing blob...', url)
-		data = null
 	};
 
 	function open() {

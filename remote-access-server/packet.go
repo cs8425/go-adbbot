@@ -26,7 +26,6 @@ func ReadTagByte(conn io.Reader) ([]byte, error){
 	}
 
 	taglen := int(buf[0] ^ xorTag)
-//	n, err := conn.Read(buf[:taglen])
 	n, err := io.ReadFull(conn, buf[:taglen])
 	if err != nil {
 		return nil, err
@@ -89,7 +88,6 @@ func ReadVTagByte(conn io.Reader) ([]byte, error){
 
 	buf := make([]byte, 0, taglen)
 	n, err := io.ReadFull(conn, buf[:taglen])
-//	n, err := conn.Read(buf[:taglen])
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +163,6 @@ func NewCompStream(conn net.Conn, level int) *CompStream {
 type FlateStream struct {
 	Conn net.Conn
 	w    *flate.Writer
-//	r    *gzip.Reader
 	r    io.ReadCloser
 }
 
@@ -187,7 +184,6 @@ func NewFlateStream(conn net.Conn, level int) *FlateStream {
 	c := new(FlateStream)
 	c.Conn = conn
 	c.w, _ = flate.NewWriter(conn, level)
-//	c.r, _ = gzip.NewReader(conn)
 	c.r = flate.NewReader(conn)
 	return c
 }
