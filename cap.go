@@ -15,6 +15,7 @@ var DEV = flag.String("dev", "", "select device")
 
 var OUT = flag.String("o", "", "output")
 
+var OnDevice = flag.Bool("od", false, "run on device")
 
 func main() {
 
@@ -23,7 +24,10 @@ func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	adbbot.Verbosity = *verbosity
-	bot := adbbot.NewBot(*DEV, *ADB)
+	bot := adbbot.NewLocalBot(*DEV, *ADB)
+	if *OnDevice {
+		bot = adbbot.NewLocalBotOnDevice()
+	}
 
 	_, err := bot.Adb("wait-for-device")
 	if err != nil {

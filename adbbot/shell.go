@@ -10,7 +10,7 @@ import (
 var Verbosity = 3
 
 func Cmd(cmd string) ([]byte, error) {
-	Vlogln(4, "command: ", cmd)
+	Vln(4, "command: ", cmd)
 
 	parts := strings.Fields(cmd)
 	head := parts[0]
@@ -20,7 +20,7 @@ func Cmd(cmd string) ([]byte, error) {
 }
 
 func CmdArg(cmd ...string) ([]byte, error) {
-	Vlogln(4, "command: ", cmd)
+	Vln(4, "command: ", cmd)
 
 	return exec.Command(cmd[0], cmd[1:]...).Output()
 }
@@ -37,7 +37,7 @@ func Cmds(x []string) {
 }
 
 func cmd_wg(cmd string, wg *sync.WaitGroup) {
-	Vlogln(3, "command: ", cmd)
+	Vln(3, "command: ", cmd)
 
 	parts := strings.Fields(cmd)
 	head := parts[0]
@@ -45,25 +45,25 @@ func cmd_wg(cmd string, wg *sync.WaitGroup) {
 
 	out, err := exec.Command(head, parts...).Output()
 	if err != nil {
-		Vlogf(3, "%s", err)
+		Vf(3, "%s", err)
 	}
-	Vlogf(3, "%s", out)
+	Vf(3, "%s", out)
 	wg.Done()
 }
 
-func Vlogf(level int, format string, v ...interface{}) {
+func Vf(level int, format string, v ...interface{}) {
 	if level <= Verbosity {
 		log.Printf(format, v...)
 //		fmt.Printf(format, v...)
 	}
 }
-func Vlog(level int, v ...interface{}) {
+func V(level int, v ...interface{}) {
 	if level <= Verbosity {
 		log.Print(v...)
 //		fmt.Print(v...)
 	}
 }
-func Vlogln(level int, v ...interface{}) {
+func Vln(level int, v ...interface{}) {
 	if level <= Verbosity {
 		log.Println(v...)
 //		fmt.Println(v...)

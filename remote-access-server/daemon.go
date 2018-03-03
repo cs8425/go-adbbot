@@ -1,4 +1,4 @@
-// go build -o daemon daemon.go packet.go
+// go build -o daemon daemon.go packet.go framebuffer.go
 package main
 
 import (
@@ -35,7 +35,7 @@ func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	adbbot.Verbosity = *verbosity
-	bot := adbbot.NewBot(*DEV, *ADB)
+	bot := adbbot.NewLocalBot(*DEV, *ADB)
 
 	// run on android by adb user(shell)
 	bot.IsOnDevice = *OnDevice
@@ -73,7 +73,7 @@ func main() {
 }
 
 var newclients chan io.ReadWriteCloser
-func handleConn(p1 net.Conn, bot *adbbot.Bot, screen *[]byte, m *Monkey) {
+func handleConn(p1 net.Conn, bot *adbbot.LocalBot, screen *[]byte, m *Monkey) {
 	evmap := map[int64]string{
 		-1: "up",
 		0: "move",
@@ -172,7 +172,7 @@ func readXY(p1 net.Conn) (x, y int, err error) {
 	return int(x0), int(y0), nil
 }
 
-func screencap(bot *adbbot.Bot, screen *[]byte) {
+func screencap(bot *adbbot.LocalBot, screen *[]byte) {
 	var buf bytes.Buffer
 
 	newclients = make(chan io.ReadWriteCloser, 16)
@@ -185,6 +185,12 @@ func screencap(bot *adbbot.Bot, screen *[]byte) {
 
 	limit := time.Duration(*reflash) * time.Millisecond
 
+/*	fb, err := FBOpen("/dev/graphics/fb0")
+	if err != nil {
+		Vln(2, "[screen][framebuffer][err]", err)
+		return
+	}*/
+
 	for {
 		start := time.Now()
 		_, err := bot.Screencap()
@@ -194,6 +200,7 @@ func screencap(bot *adbbot.Bot, screen *[]byte) {
 		Vln(4, "[screen][poll]", time.Since(start))
 
 		encoder.Encode(&buf, bot.Last_screencap)
+//		encoder.Encode(&buf, fb)
 		*screen = buf.Bytes()
 		buf.Reset()
 
@@ -237,7 +244,7 @@ type Monkey struct {
 	conn	net.Conn
 }
 
-func NewMonkey(b *adbbot.Bot, port int) (*Monkey) {
+func NewMonkey(b adbbot.Bot, port int) (*Monkey) {
 
 	forwardCmd := fmt.Sprintf("forward tcp:%d tcp:%d", port, port)
 	b.Adb(forwardCmd)
