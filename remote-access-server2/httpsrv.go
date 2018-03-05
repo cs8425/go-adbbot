@@ -175,6 +175,18 @@ func pollimg(bot adbbot.Bot) {
 
 	limit := time.Duration(*reflash) * time.Millisecond
 
+/*	conn, err := net.Dial("tcp", *daemonAddr)
+	if err != nil {
+		Vln(1, "error connct to", *daemonAddr)
+		return
+	}
+
+	bot, err := adbbot.NewRemoteBot(conn, *compress)
+	if err != nil {
+		Vln(1, "connct to", *daemonAddr, "err:", err)
+		return
+	}*/
+
 	for {
 		start := time.Now()
 		err = bot.TriggerScreencap()

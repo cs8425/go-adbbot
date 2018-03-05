@@ -27,7 +27,6 @@ type RemoteBot struct {
 	FindOnDaemon    bool // TODO
 	compress        bool
 	op              chan task
-	retCh           chan []byte
 
 	KeyDelta  time.Duration
 
@@ -44,7 +43,6 @@ func NewRemoteBot(conn net.Conn, comp bool) (*RemoteBot, error) {
 		compress: comp,
 		conn: conn,
 		op: make(chan task, 4),
-		retCh: make(chan []byte),
 		KeyDelta: 100 * time.Millisecond,
 	}
 
@@ -54,7 +52,6 @@ func NewRemoteBot(conn net.Conn, comp bool) (*RemoteBot, error) {
 }
 
 func (b *RemoteBot) pushworker() {
-	defer close(b.retCh)
 	var err error
 
 	for {
@@ -93,14 +90,6 @@ func (b *RemoteBot) pushworker() {
 				Vln(2, "[send][GetScreen]err", err, todo)
 				return
 			}
-
-			pngByte, err := ReadVTagByte(b.conn)
-			if err != nil {
-				Vln(2, "[read][GetScreen]err", err, todo)
-				return
-			}
-
-			b.retCh <- pngByte
 		}
 	}
 }
@@ -110,7 +99,7 @@ func (b *RemoteBot) Adb(parts string) ([]byte, error) { return []byte{}, nil } /
 
 func (b *RemoteBot) Shell(parts string) ([]byte, error) {
 	t := task {
-		Type: 3,
+		Type: 4,
 		Op: parts,
 	}
 	b.op <- t
@@ -131,11 +120,17 @@ func (b *RemoteBot) PullScreenByte() ([]byte, error) {
 	}
 	b.op <- t
 
-	select {
-	case pngByte := <- b.retCh:
-		return pngByte, nil
+	pngByte, err := ReadVTagByte(b.conn)
+	if err != nil {
+		Vln(2, "[read][GetScreen]err", err)
+		return nil, err
 	}
-	return nil, ErrTriggerFirst
+
+	if len(pngByte) == 0 {
+		return nil, ErrTriggerFirst
+	}
+
+	return pngByte, nil
 }
 
 func (b *RemoteBot) Screencap() (img image.Image, err error) {

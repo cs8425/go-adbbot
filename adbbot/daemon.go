@@ -9,7 +9,7 @@ import (
 	"bytes"
 	"image"
 	"image/png"
-	"image/jpeg"
+//	"image/jpeg"
 )
 
 type Daemon struct {
@@ -20,6 +20,8 @@ type Daemon struct {
 	compress    bool
 
 	captime     time.Time // lock?
+	triggerCh   chan struct{}
+	screenBuf   bytes.Buffer
 
 //	newclients  chan io.ReadWriteCloser
 }
@@ -29,9 +31,12 @@ func NewDaemon(ln net.Listener, bot Bot, comp bool) (*Daemon, error) {
 		ln: ln,
 		bot: bot,
 		compress: comp,
-		captime: time.Now(),
+		triggerCh: make(chan struct{}, 1),
 		Reflash: 500 * time.Millisecond,
 	}
+
+	d.triggerCh <- struct{}{}
+	go d.screenCoder()
 
 	return &d, nil
 }
@@ -58,7 +63,45 @@ func (d *Daemon) Listen() {
 
 }
 
+func (d *Daemon) screenCoder() {
+	// jpg option
+//	option := &jpeg.Options{100}
+
+	encBuf := &pngBuf{}
+	encoder := png.Encoder{
+//		CompressionLevel: png.BestSpeed,
+		CompressionLevel: png.NoCompression,
+		BufferPool: png.EncoderBufferPool(encBuf),
+	}
+
+	for {
+		_, ok := <- d.triggerCh
+		if !ok {
+			return
+		}
+		if time.Since(d.captime) >= d.Reflash { // keep away from impossible screencap frequency
+			d.captime = time.Now()
+			d.bot.TriggerScreencap()
+			Vln(4, "[screen][trigger]", time.Since(d.captime))
+			d.screenBuf.Reset()
+			encoder.Encode(&d.screenBuf, d.bot.GetLastScreencap())
+//			jpeg.Encode(&d.screenBuf, d.bot.GetLastScreencap(), option)
+			Vln(4, "[screen][encode]", time.Since(d.captime))
+		}
+	}
+
+}
+
 func (d *Daemon) Close() (error) {
+	select {
+	case _, ok := <- d.triggerCh:
+		if ok {
+			close(d.triggerCh)
+		}
+	default:
+		close(d.triggerCh)
+	}
+
 	return d.ln.Close()
 }
 
@@ -69,17 +112,18 @@ func (b *pngBuf) Get() (*png.EncoderBuffer) {
 func (b *pngBuf) Put(*png.EncoderBuffer) { }
 
 func (d *Daemon) handleConn(p1 net.Conn) {
-	var buf bytes.Buffer
 
-	// jpg option
-	option := &jpeg.Options{100}
-
-	encBuf := &pngBuf{}
-	encoder := png.Encoder{
-//		CompressionLevel: png.BestSpeed,
-		CompressionLevel: png.NoCompression,
-		BufferPool: png.EncoderBufferPool(encBuf),
-	}
+	screenCh := make(chan []byte, 1)
+	defer close(screenCh)
+	go func (p1 net.Conn, ch chan []byte) {
+		for {
+			buf, ok := <- ch
+			if !ok {
+				return
+			}
+			WriteVTagByte(p1, buf)
+		}
+	}(p1, screenCh)
 
 	for {
 		todo, err := ReadTagStr(p1)
@@ -117,29 +161,22 @@ func (d *Daemon) handleConn(p1 net.Conn) {
 			}
 			d.bot.Key(keycode, KeyAction(ev))
 
+		case "Screencap":
+			select {
+			case d.triggerCh <- struct{}{}:
+			default:
+			}
+
 /*		case "ScreenSize":
 			WriteVLen(p1, int64(d.bot.ScreenBounds.Dx()))
 			WriteVLen(p1, int64(d.bot.ScreenBounds.Dy()))*/
-		case "Screencap":
-			if time.Since(d.captime) >= d.Reflash { // keep away from impossible screencap frequency
-				d.captime = time.Now()
-				d.bot.TriggerScreencap()
-				Vln(4, "[screen][trigger]", time.Since(d.captime))
-				buf.Reset()
-				encoder.Encode(&buf, d.bot.GetLastScreencap())
-				Vln(4, "[screen][encode]", time.Since(d.captime))
-			}
-		case "Screencap2":
-			if time.Since(d.captime) > d.Reflash { // keep away from impossible screencap frequency
-				d.captime = time.Now()
-				d.bot.TriggerScreencap()
-				Vln(4, "[screen][trigger]", time.Since(d.captime))
-				buf.Reset()
-				jpeg.Encode(&buf, d.bot.GetLastScreencap(), option)
-				Vln(4, "[screen][encode]", time.Since(d.captime))
-			}
 		case "GetScreen":
-			WriteVTagByte(p1, buf.Bytes())
+			//WriteVTagByte(p1, buf.Bytes())
+			select {
+			case <- screenCh:
+			default:
+			}
+			screenCh <- d.screenBuf.Bytes()
 
 /*		case "poll":
 			Vln(3, "[todo][poll]", p1)
@@ -164,50 +201,5 @@ func readXY(p1 net.Conn) (x, y int, err error) {
 	}
 	return int(x0), int(y0), nil
 }
-
-/*func (d *Daemon) pollScreen(screen *[]byte) {
-	var buf bytes.Buffer
-
-	d.newclients = make(chan io.ReadWriteCloser, 16)
-	clients := make(map[io.ReadWriteCloser]io.ReadWriteCloser, 0)
-
-	encoder := png.Encoder{
-//		CompressionLevel: png.BestSpeed,
-		CompressionLevel: png.NoCompression,
-	}
-	limit := d.Reflash
-
-	for {
-		start := time.Now()
-		_, err := d.bot.Screencap()
-		if err != nil {
-			return
-		}
-		Vln(4, "[screen][poll]", time.Since(start))
-
-		encoder.Encode(&buf, d.bot.GetLastScreencap())
-		*screen = buf.Bytes()
-		buf.Reset()
-		Vln(4, "[screen][encode]", len(*screen), time.Since(start))
-
-		for i, c := range clients {
-			err := WriteVTagByte(c, *screen)
-			if err != nil {
-				Vln(2, "[screen][push][err]", err)
-				c.Close()
-				delete(clients, i)
-			}
-		}
-		for len(d.newclients) > 0 {
-			client := <- d.newclients
-			clients[client] = client
-		}
-
-		if time.Since(start) < limit {
-			time.Sleep(limit - time.Since(start))
-		}
-	}
-}*/
-
 
 
