@@ -33,7 +33,7 @@ func (b *LocalBot) FindExistReg(tmpl *Tmpl, times int, delay int) (x int, y int,
 			var reg image.Rectangle
 			if b.TargetScreen != nil {
 				scriptsize := b.TargetScreen.Size()
-				screensize := b.Screen.Size()
+				screensize := b.ScreenBounds.Size()
 				reg = tmpl.Region
 				newMinX := reg.Min.X * screensize.X / scriptsize.X
 				newMaxX := reg.Max.X * screensize.X / scriptsize.X
@@ -58,7 +58,7 @@ func (b *LocalBot) FindExistReg(tmpl *Tmpl, times int, delay int) (x int, y int,
 		timeStart()
 		if b.TargetScreen != nil {
 			scriptsize := b.TargetScreen.Size()
-			screensize := b.Screen.Size()
+			screensize := b.ScreenBounds.Size()
 			tmplsize := tmpl.Image.Bounds().Size()
 			newX := tmplsize.X * screensize.X / scriptsize.X
 			newY := tmplsize.Y * screensize.Y / scriptsize.Y

@@ -142,11 +142,11 @@ func handleConn(p1 net.Conn, bot *adbbot.LocalBot, screen *[]byte, m *Monkey) {
 			m.Key(keycode, evstr)
 
 		case "ScreenSize":
-			WriteVLen(p1, int64(bot.Screen.Dx()))
-			WriteVLen(p1, int64(bot.Screen.Dy()))
+			WriteVLen(p1, int64(bot.ScreenBounds.Dx()))
+			WriteVLen(p1, int64(bot.ScreenBounds.Dy()))
 		case "Screencap":
 			//bot.Screencap()
-			//bot.Last_screencap
+			//bot.GetLastScreencap()
 			WriteVTagByte(p1, *screen)
 		case "poll":
 			Vln(3, "[todo][poll]", p1)
@@ -199,14 +199,14 @@ func screencap(bot *adbbot.LocalBot, screen *[]byte) {
 		}
 		Vln(4, "[screen][poll]", time.Since(start))
 
-		encoder.Encode(&buf, bot.Last_screencap)
+		encoder.Encode(&buf, bot.GetLastScreencap())
 //		encoder.Encode(&buf, fb)
 		*screen = buf.Bytes()
 		buf.Reset()
 
-/*		rawimg, ok := bot.Last_screencap.(*image.NRGBA)
+/*		rawimg, ok := bot.GetLastScreencap().(*image.NRGBA)
 		if !ok {
-			encoder.Encode(&buf, bot.Last_screencap)
+			encoder.Encode(&buf, bot.GetLastScreencap())
 			*screen = buf.Bytes()
 			buf.Reset()
 		}

@@ -8,7 +8,8 @@ import (
 
 	"compress/flate"
 	"net"
-//	"github.com/golang/snappy"
+	"time"
+	"github.com/golang/snappy"
 )
 
 const xorTag byte = 0x00
@@ -130,7 +131,7 @@ func WriteVLen(conn io.Writer, n int64) (err error){
 	return
 }
 
-/*
+
 type CompStream struct {
 	Conn net.Conn
 	w    *snappy.Writer
@@ -151,6 +152,44 @@ func (c *CompStream) Close() error {
 	return c.Conn.Close()
 }
 
+// LocalAddr satisfies net.Conn interface
+func (c *CompStream) LocalAddr() net.Addr {
+	if ts, ok := c.Conn.(interface {
+		LocalAddr() net.Addr
+	}); ok {
+		return ts.LocalAddr()
+	}
+	return nil
+}
+
+// RemoteAddr satisfies net.Conn interface
+func (c *CompStream) RemoteAddr() net.Addr {
+	if ts, ok := c.Conn.(interface {
+		RemoteAddr() net.Addr
+	}); ok {
+		return ts.RemoteAddr()
+	}
+	return nil
+}
+
+func (c *CompStream) SetReadDeadline(t time.Time) error {
+	return c.Conn.SetReadDeadline(t)
+}
+
+func (c *CompStream) SetWriteDeadline(t time.Time) error {
+	return c.Conn.SetWriteDeadline(t)
+}
+
+func (c *CompStream) SetDeadline(t time.Time) error {
+	if err := c.SetReadDeadline(t); err != nil {
+		return err
+	}
+	if err := c.SetWriteDeadline(t); err != nil {
+		return err
+	}
+	return nil
+}
+
 func NewCompStream(conn net.Conn, level int) *CompStream {
 	c := new(CompStream)
 	c.Conn = conn
@@ -158,7 +197,7 @@ func NewCompStream(conn net.Conn, level int) *CompStream {
 	c.r = snappy.NewReader(conn)
 	return c
 }
-*/
+
 type FlateStream struct {
 	Conn net.Conn
 	w    *flate.Writer
@@ -177,6 +216,44 @@ func (c *FlateStream) Write(p []byte) (n int, err error) {
 
 func (c *FlateStream) Close() error {
 	return c.Conn.Close()
+}
+
+// LocalAddr satisfies net.Conn interface
+func (c *FlateStream) LocalAddr() net.Addr {
+	if ts, ok := c.Conn.(interface {
+		LocalAddr() net.Addr
+	}); ok {
+		return ts.LocalAddr()
+	}
+	return nil
+}
+
+// RemoteAddr satisfies net.Conn interface
+func (c *FlateStream) RemoteAddr() net.Addr {
+	if ts, ok := c.Conn.(interface {
+		RemoteAddr() net.Addr
+	}); ok {
+		return ts.RemoteAddr()
+	}
+	return nil
+}
+
+func (c *FlateStream) SetReadDeadline(t time.Time) error {
+	return c.Conn.SetReadDeadline(t)
+}
+
+func (c *FlateStream) SetWriteDeadline(t time.Time) error {
+	return c.Conn.SetWriteDeadline(t)
+}
+
+func (c *FlateStream) SetDeadline(t time.Time) error {
+	if err := c.SetReadDeadline(t); err != nil {
+		return err
+	}
+	if err := c.SetWriteDeadline(t); err != nil {
+		return err
+	}
+	return nil
 }
 
 func NewFlateStream(conn net.Conn, level int) *FlateStream {
