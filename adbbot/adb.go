@@ -5,10 +5,9 @@ import (
 	"image"
 	"io/ioutil"
 	"os/exec"
-	"strconv"
 )
 
-type Bot struct {
+type LocalBot struct {
 	Dev             string
 	Exec            string
 	UseSU           bool
@@ -18,14 +17,20 @@ type Bot struct {
 	Local_tmp_path  string
 	Adb_tmp_path    string
 
-	Last_screencap  image.Image
+	lastScreencap   image.Image
 
-	Screen          *image.Rectangle
+//	Screen          *image.Rectangle
 	TargetScreen    *image.Rectangle
+
+	ScreenBounds    image.Rectangle
+
 
 	devstr          string
 	width           int
 	height          int
+
+
+	Input
 
 
 	// shortcuts
@@ -33,14 +38,10 @@ type Bot struct {
 	Rect, NewRect            func(x, y, xp, yp int) (image.Rectangle)
 	RectAbs, NewRectAbs      func(x, y, x2, y2 int) (image.Rectangle)
 	RectAll, NewRectAll      func() (image.Rectangle)
-
-//	Adb             func(parts string) ([]byte, error)
-//	Shell           func(parts string) ([]byte, error)
-//	Pipe            func(parts string) ([]byte, error)
 }
 
-func NewBot(device, exec string) (*Bot) {
-	b := Bot{
+func NewLocalBot(device, exec string) (*LocalBot) {
+	b := LocalBot {
 		Dev: device,
 		Exec: exec,
 		UseSU: true,
@@ -49,15 +50,17 @@ func NewBot(device, exec string) (*Bot) {
 		Local_tmp_path: "./",
 		Adb_tmp_path:  "/data/local/tmp/",
 		IsOnDevice: false,
-//		devstr: "",
 
-		Screen: nil,
+//		Screen: nil,
 		TargetScreen: nil,
 
 		Rect: NewRect,
 		RectAbs: NewRectAbs,
 		RectAll: NewRectAll,
 	}
+
+	input := NewCmdInput(&b)
+	b.Input = input
 
 	b.NewTmpl = NewTmpl
 	b.NewRect = NewRect
@@ -77,13 +80,13 @@ func NewBot(device, exec string) (*Bot) {
 	return &b
 }
 
-func NewBotOnDevice() (*Bot) {
-	b := NewBot("","")
+func NewLocalBotOnDevice() (*LocalBot) {
+	b := NewLocalBot("","")
 	b.IsOnDevice = true
 	return b
 }
 
-func (b *Bot) Adb(parts string) ([]byte, error) {
+func (b *LocalBot) Adb(parts string) ([]byte, error) {
 	if b.IsOnDevice {
 		// nop
 		return []byte{}, nil
@@ -92,7 +95,7 @@ func (b *Bot) Adb(parts string) ([]byte, error) {
 	}
 }
 
-func (b *Bot) Shell(parts string) ([]byte, error) {
+func (b *LocalBot) Shell(parts string) ([]byte, error) {
 	if b.IsOnDevice {
 		cmd := []string{"-c", parts}
 		return exec.Command("sh", cmd...).Output()
@@ -101,7 +104,7 @@ func (b *Bot) Shell(parts string) ([]byte, error) {
 	}
 }
 
-func (b *Bot) Pipe(parts string) ([]byte, error) {
+func (b *LocalBot) Pipe(parts string) ([]byte, error) {
 	if b.IsOnDevice {
 		return Cmd(parts)
 	} else {
@@ -109,7 +112,7 @@ func (b *Bot) Pipe(parts string) ([]byte, error) {
 	}
 }
 
-func (b *Bot) Screencap() (img image.Image, err error){
+func (b *LocalBot) TriggerScreencap() (err error) {
 	var screencap []byte
 
 	if b.UsePipe {
@@ -118,38 +121,43 @@ func (b *Bot) Screencap() (img image.Image, err error){
 		screencap, err = b.screencap_file()
 	}
 
-	Vlogln(5, "screen", b.width, b.height, b.Screen, b.TargetScreen)
+	Vln(5, "screen", b.width, b.height, b.ScreenBounds, b.TargetScreen)
 
 	b.width = int(binary.LittleEndian.Uint32(screencap[0:4]))
 	b.height = int(binary.LittleEndian.Uint32(screencap[4:8]))
 
-	Vlogln(5, "height = ", b.height)
-	Vlogln(5, "width = ", b.width)
-	Vlogln(5, "length = ", len(screencap[12:]))
-//	Vlogln(5, "dump = ", screencap[12:52])
+	Vln(5, "height = ", b.height)
+	Vln(5, "width = ", b.width)
+	Vln(5, "length = ", len(screencap[12:]))
+//	Vln(5, "dump = ", screencap[12:52])
 
-	if b.Screen == nil {
-		b.Screen = &image.Rectangle{image.Pt(0, 0), image.Pt(b.width, b.height)}
-//		b.Screen = new(image.Rectangle)
-//		b.Screen.Min = image.Pt(0, 0)
-//		b.Screen.Max = image.Pt(b.width, b.height)
-		Vlogln(5, "set screen", b.width, b.height, b.Screen)
+	if b.ScreenBounds.Empty() {
+		b.ScreenBounds = image.Rectangle{image.Pt(0, 0), image.Pt(b.width, b.height)}
+		Vln(5, "set screen", b.width, b.height, b.ScreenBounds)
 	}
 
-	img = &image.NRGBA{
+	img := &image.NRGBA{
 		Pix: screencap[12:],
 		Stride: b.width * 4, // bytes
 		Rect: image.Rect(0, 0, b.width, b.height),
 	}
 
 	if err == nil {
-		b.Last_screencap = img
+		b.lastScreencap = img
 	}
 
-	return img, err
+	return
 }
 
-func (b *Bot) screencap_file() ([]byte, error){
+func (b *LocalBot) Screencap() (img image.Image, err error){
+	err = b.TriggerScreencap()
+	if err != nil {
+		return nil, err
+	}
+	return b.lastScreencap, err
+}
+
+func (b *LocalBot) screencap_file() ([]byte, error){
 
 	if b.UseSU {
 		_, err := b.Shell("su -c screencap /dev/screencap-tmp.raw")
@@ -183,99 +191,18 @@ func (b *Bot) screencap_file() ([]byte, error){
 	return screencap, nil
 }
 
-
-func (b *Bot) ScriptScreen(x0, y0, dx, dy int) () {
-	b.TargetScreen = &image.Rectangle{image.Pt(x0, y0), image.Pt(dx, dy)}
-	Vlogln(4, "set Script Screen", x0, y0, dx, dy, b.TargetScreen)
-}
-
-func (b *Bot) Remap(loc image.Point) (image.Point){
-	x := loc.X
-	y := loc.Y
-	Vlogln(4, "Remap", b.TargetScreen, b.Screen)
-	if b.TargetScreen != nil && b.Screen != nil {
-		scriptsize := b.TargetScreen.Size()
-		screensize := b.Screen.Size()
-		x = x * screensize.X / scriptsize.X
-		y = y * screensize.X / scriptsize.X
-		Vlogln(4, "Remap to", x, y)
+func (b *LocalBot) PullScreenByte() ([]byte, error) {
+	if b.lastScreencap == nil {
+		return nil, ErrTriggerFirst
 	}
-	return image.Pt(x, y)
+	return b.lastScreencap.(*image.NRGBA).Pix, nil
 }
 
-func (b *Bot) Click(loc image.Point, remap bool) (err error){
-	if remap {
-		loc = b.Remap(loc)
-	}
-	_, err = b.Shell("input tap " + strconv.Itoa(loc.X) + " " + strconv.Itoa(loc.Y))
-	return
+func (b *LocalBot) GetLastScreencap() (image.Image) {
+	return b.lastScreencap
 }
 
-func (b *Bot) Swipe(p0,p1 image.Point, remap bool) (err error){
-	if remap {
-		p0 = b.Remap(p0)
-		p1 = b.Remap(p1)
-	}
-	_, err = b.Shell("input swipe " + strconv.Itoa(p0.X) + " " + strconv.Itoa(p0.Y) + " " + strconv.Itoa(p1.X) + " " + strconv.Itoa(p1.Y))
-	return
-}
-
-func (b *Bot) SwipeT(p0,p1 image.Point, time int, remap bool) (err error){
-	if remap {
-		p0 = b.Remap(p0)
-		p1 = b.Remap(p1)
-	}
-	_, err = b.Shell("input swipe " + strconv.Itoa(p0.X) + " " + strconv.Itoa(p0.Y) + " " + strconv.Itoa(p1.X) + " " + strconv.Itoa(p1.Y) + " " + strconv.Itoa(time))
-	return
-}
-
-func (b Bot) Text(in string) (err error){
-	_, err = b.Shell("input text " + in)
-	return
-}
-
-func (b Bot) Textln(in string) (err error){
-	err = b.Text(in)
-	if err != nil {
-		return
-	}
-
-	err = b.Keyevent("KEYCODE_ENTER")
-	return
-}
-
-func (b Bot) Keyevent(in string) (err error){
-	_, err = b.Shell("input keyevent " + in)
-	return
-}
-
-func (b Bot) KeyHome() (error){
-	return b.Keyevent("KEYCODE_HOME")
-}
-
-func (b Bot) KeyBack() (error){
-	return b.Keyevent("KEYCODE_BACK")
-}
-
-func (b Bot) KeySwitch() (error){
-	return b.Keyevent("KEYCODE_APP_SWITCH")
-}
-
-func (b Bot) KeyPower() (error){
-	return b.Keyevent("KEYCODE_POWER")
-}
-
-func (b Bot) StartApp(app string) (err error){
-	_, err = b.Shell("monkey -p " + app + " -c android.intent.category.LAUNCHER 1")
-	return
-}
-
-func (b Bot) KillApp(app string) (err error){
-	_, err = b.Shell("am force-stop " + app)
-	return
-}
-
-func (b *Bot) SaveScreen(imagefile string) (err error){
+func (b *LocalBot) SaveScreen(imagefile string) (err error){
 	img, err := b.Screencap()
 	if err != nil {
 		return
@@ -283,4 +210,34 @@ func (b *Bot) SaveScreen(imagefile string) (err error){
 	err = SaveImage(img, imagefile)
 	return
 }
+
+func (b *LocalBot) StartApp(app string) (err error){
+	_, err = b.Shell("monkey -p " + app + " -c android.intent.category.LAUNCHER 1")
+	return
+}
+
+func (b *LocalBot) KillApp(app string) (err error){
+	_, err = b.Shell("am force-stop " + app)
+	return
+}
+
+func (b *LocalBot) ScriptScreen(x0, y0, dx, dy int) () {
+	b.TargetScreen = &image.Rectangle{image.Pt(x0, y0), image.Pt(dx, dy)}
+	Vln(4, "set Script Screen", x0, y0, dx, dy, b.TargetScreen)
+}
+
+func (b *LocalBot) Remap(loc image.Point) (image.Point){
+	x := loc.X
+	y := loc.Y
+	Vln(4, "Remap", b.TargetScreen, b.ScreenBounds)
+	if b.TargetScreen != nil && !b.ScreenBounds.Empty() {
+		scriptsize := b.TargetScreen.Size()
+		screensize := b.ScreenBounds.Size()
+		x = x * screensize.X / scriptsize.X
+		y = y * screensize.X / scriptsize.X
+		Vln(4, "Remap to", x, y)
+	}
+	return image.Pt(x, y)
+}
+
 

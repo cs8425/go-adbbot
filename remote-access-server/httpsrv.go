@@ -1,12 +1,10 @@
-// go build -o httpsrv httpsrv.go packet.go
+// go build -o httpsrv httpsrv.go
 package main
 
 import (
 	"io"
-//	"io/ioutil"
 	"net"
 	"net/http"
-//	"syscall"
 
 	"log"
 	"runtime"
@@ -17,25 +15,31 @@ import (
 	"strconv"
 	"strings"
 
-	"./websocket"
+	"image"
+	"../adbbot"
+
+	"../3rd/websocket"
 )
 
 var localAddr = flag.String("l", ":5800", "")
 var daemonAddr = flag.String("t", "127.0.0.1:6900", "")
 
+var wsComp = flag.Bool("wscomp", false, "ws compression")
+var compress = flag.Bool("comp", false, "compress connection")
+
+var reflash = flag.Int("r", 1000, "update screen minimum time (ms)")
+
 var verbosity = flag.Int("v", 3, "verbosity")
 
 type OP struct {
-	Type      int	// 0 >> Key, 1 >> Click, 2 >> Swipe
+	Type      int	// 0 >> Key, 1 >> touch
 	Op        string
 	X0        int
 	Y0        int
-	X1        int
-	Y1        int
-	Dt        int
+	Ev        int
 }
 
-var upgrader = websocket.Upgrader{} // use default options
+var upgrader = websocket.Upgrader{ EnableCompression: false } // use default options
 
 func ws(w http.ResponseWriter, r *http.Request) {
 	c, err := upgrader.Upgrade(w, r, nil)
@@ -60,12 +64,18 @@ func ws(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		todo := lines[0]
+		Vln(4, "[lines]", lines)
 
 		switch todo {
 		case "key": // home, back, task, power
+			ev, err := strconv.ParseInt(lines[2], 10, 32)
+			if err != nil {
+				continue
+			}
 			t := OP {
 				Type: 0,
 				Op: lines[1],
+				Ev: int(ev),
 			}
 			Vln(3, "[key]", t)
 			op <- t
@@ -73,23 +83,6 @@ func ws(w http.ResponseWriter, r *http.Request) {
 		case "move":
 			mvs(lines[1:])
 
-		case "click":
-			d := strings.Split(lines[1], ",")
-			x, err := strconv.ParseInt(d[0], 10, 32)
-			if err != nil {
-				return
-			}
-			y, err := strconv.ParseInt(d[1], 10, 32)
-			if err != nil {
-				return
-			}
-			t := OP {
-				Type: 1,
-				X0: int(x),
-				Y0: int(y),
-			}
-			Vln(3, "[click]", t)
-			op <- t
 		default:
 			Vln(3, "[undef]", todo)
 		}
@@ -97,36 +90,33 @@ func ws(w http.ResponseWriter, r *http.Request) {
 }
 
 func mvs(mvs []string) {
-	Vln(3, "[mvs]", mvs)
+	Vln(4, "[mvs]", mvs)
 
-	var x0, y0, dt int64
-	for idx, line := range mvs {
+	var x, y, ev int64
+	var err error
+	for _, line := range mvs {
 		d := strings.Split(line, ",")
-		x1, err := strconv.ParseInt(d[0], 10, 32)
+		x, err = strconv.ParseInt(d[0], 10, 32)
 		if err != nil {
 			return
 		}
-		y1, err := strconv.ParseInt(d[1], 10, 32)
+		y, err = strconv.ParseInt(d[1], 10, 32)
 		if err != nil {
 			return
 		}
-		dt, err = strconv.ParseInt(d[2], 10, 32)
+		ev, err = strconv.ParseInt(d[2], 10, 32)
 		if err != nil {
 			return
 		}
-		t := OP {
-			Type: 2,
-			X0: int(x0),
-			Y0: int(y0),
-			X1: int(x1),
-			Y1: int(y1),
-			Dt: int(dt),
-		}
-		x0, y0 = x1, y1
 
-		if idx > 0 {
-			op <- t
+		t := OP {
+			Type: 1,
+			X0: int(x),
+			Y0: int(y),
+			Ev: int(ev),
 		}
+		Vln(5, "[mv]", t)
+		op <- t
 	}
 }
 
@@ -134,105 +124,162 @@ func keys(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, html)
 }
 
+
+type Wsclient struct {
+	*websocket.Conn
+	data chan []byte
+}
+func (c *Wsclient) Send(buf []byte) {
+	select {
+	case <- c.data:
+	default:
+	}
+	c.data <- buf
+}
+func (c *Wsclient) worker() {
+	for {
+		buf := <- c.data
+		err := c.WriteMessage(websocket.BinaryMessage, buf)
+		if err != nil {
+			c.Close()
+			return
+		}
+	}
+}
+
 var newclients chan *websocket.Conn
 var screen chan []byte
 func broacast() {
 	newclients = make(chan *websocket.Conn, 16)
 	screen = make(chan []byte, 1)
-	clients := make(map[*websocket.Conn]*websocket.Conn, 0)
+	clients := make(map[*Wsclient]*Wsclient, 0)
 
 	for {
 		img := <- screen
-		for i, c := range clients {
-			err := c.WriteMessage(websocket.BinaryMessage, img)
-			if err != nil {
-				Vln(2, "write:", err)
-				c.Close()
-				delete(clients, i)
-			}
+		for _, c := range clients {
+			c.Send(img)
 		}
 		for len(newclients) > 0 {
 			client := <-newclients
-			clients[client] = client
+			c := &Wsclient{ client, make(chan []byte, 1) }
+			go c.worker()
+			clients[c] = c
 			Vln(3, "[new client]", client.RemoteAddr())
 		}
 	}
 }
 
-func pollimg(daemon net.Conn) {
+func pollimg(bot adbbot.Bot) {
 	var err error
 	var buf []byte
 
-	WriteTagStr(daemon, "poll")
-	conn := NewCompStream(daemon, 1)
-//	conn := NewFlateStream(daemon, 1)
+	limit := time.Duration(*reflash) * time.Millisecond
+
+/*	conn, err := net.Dial("tcp", *daemonAddr)
+	if err != nil {
+		Vln(1, "error connct to", *daemonAddr)
+		return
+	}
+
+	bot, err := adbbot.NewRemoteBot(conn, *compress)
+	if err != nil {
+		Vln(1, "connct to", *daemonAddr, "err:", err)
+		return
+	}*/
+
 	for {
 		start := time.Now()
-		buf, err = ReadVTagByte(conn)
+		err = bot.TriggerScreencap()
 		if err != nil {
-			Vln(2, "[screen][pool]err", err)
+			Vln(2, "[screen][trigger]err", err)
 			return
 		}
-		Vln(4, "[screen][poll]", len(buf), time.Since(start))
+		Vln(4, "[screen][trigger]", time.Since(start))
 
+		buf, err = bot.PullScreenByte()
+		if err != nil {
+			Vln(2, "[screen][pull]err", err)
+			return
+		}
+		Vln(4, "[screen][pull]", len(buf), time.Since(start))
+
+		select {
+		case <- screen:
+		default:
+		}
 		screen <- buf
+
+		if time.Since(start) < limit {
+			time.Sleep(limit - time.Since(start))
+		}
 	}
 }
 
 var op chan OP
-func pushop(daemon net.Conn) {
-	var err error
+func pushop(bot adbbot.Bot) {
 	op = make(chan OP, 4)
+
+	var evmap = map[int]adbbot.KeyAction{
+		-1: adbbot.KEY_UP,
+		0: adbbot.KEY_MV,
+		1: adbbot.KEY_DOWN,
+	}
+
+	var keymap = map[string]string{
+		"home": "KEYCODE_HOME",
+		"back": "KEYCODE_BACK",
+		"task": "KEYCODE_APP_SWITCH",
+		"power": "KEYCODE_POWER",
+	}
 
 	for {
 		todo := <- op
 
 		switch todo.Type {
 		case 0:
-			err = WriteTagStr(daemon, "Key")
-			if err != nil {
-				Vln(2, "[send][Key]err", err, todo)
-				return
+			keycode, ok := keymap[todo.Op]
+			if !ok {
+				continue
 			}
-			WriteTagStr(daemon, todo.Op)
+
+			ty, ok := evmap[todo.Ev]
+			if !ok {
+				continue
+			}
+			bot.Key(keycode, ty)
+
 		case 1:
-			err = WriteTagStr(daemon, "Click")
-			if err != nil {
-				Vln(2, "[send][Click]err", err, todo)
-				return
+			ty, ok := evmap[todo.Ev]
+			if !ok {
+				continue
 			}
-			WriteVLen(daemon, int64(todo.X0))
-			WriteVLen(daemon, int64(todo.Y0))
-		case 2:
-			err = WriteTagStr(daemon, "Swipe")
-			if err != nil {
-				Vln(2, "[send][Swipe]err", err, todo)
-				return
-			}
-			WriteVLen(daemon, int64(todo.X0))
-			WriteVLen(daemon, int64(todo.Y0))
-			WriteVLen(daemon, int64(todo.X1))
-			WriteVLen(daemon, int64(todo.Y1))
-			WriteVLen(daemon, int64(todo.Dt))
+			bot.Touch(image.Pt(todo.X0, todo.Y0), ty)
 		}
 	}
 }
+
 func main() {
 	log.SetFlags(log.Ldate|log.Ltime)
 	flag.Parse()
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
+	upgrader.EnableCompression = *wsComp
+	Vf(1, "ws EnableCompression = %v\n", *wsComp)
 	Vf(1, "server Listen @ %v\n", *localAddr)
 
-	poll, err := net.Dial("tcp", *daemonAddr)
+	conn, err := net.Dial("tcp", *daemonAddr)
 	if err != nil {
 		Vln(1, "error connct to", *daemonAddr)
 		return
 	}
-	go pollimg(poll)
 
-	conn, err := net.Dial("tcp", *daemonAddr)
-	go pushop(conn)
+	bot, err := adbbot.NewRemoteBot(conn, *compress)
+	if err != nil {
+		Vln(1, "connct to", *daemonAddr, "err:", err)
+		return
+	}
+	go pushop(bot)
+	go pollimg(bot)
 	Vln(1, "connct", *daemonAddr, "ok!")
 
 	go broacast()
@@ -241,21 +288,6 @@ func main() {
 	http.HandleFunc("/", keys)
 	http.ListenAndServe(*localAddr, nil)
 	
-}
-
-func readXY(p1 net.Conn) (x, y int, err error) {
-	var x0, y0 int64
-	x0, err = ReadVLen(p1)
-	if err != nil {
-		Vln(2, "[x]err", err)
-		return
-	}
-	y0, err = ReadVLen(p1)
-	if err != nil {
-		Vln(2, "[y]err", err)
-		return
-	}
-	return int(x0), int(y0), nil
 }
 
 func Vln(level int, v ...interface{}) {
@@ -276,13 +308,10 @@ var html = `<!doctype html>
 <script src="//code.jquery.com/jquery-3.1.0.min.js"></script>
 <style>
 html, body {
-	height: 100%;
-	margin: 0px;
+	margin: 2px;
 }
 body > div {
-	float: left;
-	width: 50%;
-	height: 10%;
+	height: 10vh;
 }
 #screen {
     width: auto;
@@ -300,28 +329,15 @@ button {
 </style>
 </head>
 <body>
-	<div>
-		<div id="btns">
-			<button id="back">◁</button>
-			<button id="home">◯</button>
-			<button id="task">▢</button>
-			<button id="power">⏻⏼</button>
-		</div>
-		<img id="screen" />
-		<canvas id="screen_holder"></canvas>
+	<img id="screen" />
+	<div id="btns">
+		<button id="back">◁</button>
+		<button id="home">◯</button>
+		<button id="task">▢</button>
+		<button id="power">⏻⏼</button>
 	</div>
 </body>
 <script type="text/javascript">
-var bindlist = ['home', 'back', 'task', 'power'];
-for(idx in bindlist){
-	var ele = bindlist[idx];
-	(function(ele){
-		$('#' + ele).bind('click', function(e){
-			send('key', ele)
-		});
-	})(ele);
-}
-
 var pand = function(num) {
     return (num < 10) ? '0' + num : num + '';
 }
@@ -338,6 +354,19 @@ var now = function() {
     return out;
 }
 
+var bindlist = ['home', 'back', 'task', 'power'];
+for(idx in bindlist){
+	var ele = bindlist[idx];
+	(function(ele){
+		$('#' + ele).bind('mousedown touchstart', function(e){
+			e.preventDefault()
+			send('key', ele + '\n1')
+		}).bind('mouseup touchend', function(e){
+			e.preventDefault()
+			send('key', ele + '\n-1')
+		})
+	})(ele);
+}
 
 var pos = {}
 function getXY(e) {
@@ -354,7 +383,7 @@ function getXY(e) {
 		x = e.offsetX * scale;
 		y = e.offsetY * scale;
 	}
-    return [x,y];
+	return [x,y];
 }
 
 function send(type, data) {
@@ -370,7 +399,7 @@ var t = null;
 var queue = [];
 var delaypost = null;
 var mousemove = function(){
-//	delaypost = setTimeout(mousemove, 50);
+	delaypost = setTimeout(mousemove, 50);
 	if(queue.length == 0) return;
 	var out = '';
 	for(var i=0; i<queue.length; i++){
@@ -380,7 +409,6 @@ var mousemove = function(){
 		out += Math.round(dx) + ',' + Math.round(dy) + ',' + Math.round(dt) + '\n';
 	}
 //	console.log('move', out);
-//	$.post('/move', out, null, 'text');
 	send('move', out)
 	queue = [];
 }
@@ -397,7 +425,9 @@ $('#screen').bind('mousedown touchstart', function(e){
 	pos.x = x
 	pos.y = y
 
-	queue.push([x, y, 0]);
+	queue.push([x, y, 1])
+
+	if(!delaypost) delaypost = setTimeout(mousemove, 50)
 
 }).bind('mouseup touchend', function(e){
 	e.preventDefault()
@@ -407,20 +437,13 @@ $('#screen').bind('mousedown touchstart', function(e){
 	var xy = getXY(e)
 	var x = xy[0]
 	var y = xy[1]
+	pos.x = x
+	pos.y = y
 
-	queue.push([x, y, dt])
-	mousemove()
+	queue.push([x, y, -1])
 
-	if(dt > 120) {
-//		queue.push([x, y, dt])
-//		mousemove()
-//		if(!delaypost) delaypost = setTimeout(mousemove, 50);
-	} else {
-		queue = []
-		console.log('click', x, y)
-		var out = x + ',' + y
-//		$.post('/click', out, null, 'text');
-	}
+	if(!delaypost) delaypost = setTimeout(mousemove, 50)
+
 }).bind('mousemove touchmove', function(e){
 	if(!isdrag) return;
 	e.preventDefault()
@@ -429,23 +452,20 @@ $('#screen').bind('mousedown touchstart', function(e){
 	var y = xy[1]
 	pos.x = x
 	pos.y = y
-/*	queue.push([x, y]);
+	queue.push([x, y, 0])
 
-	if(!delaypost) delaypost = setTimeout(mousemove, 50);*/
-}).bind('click', function(e){
+	if(!delaypost) delaypost = setTimeout(mousemove, 50)
+
+})
+$(document).bind('mouseup touchend', function(e){
+	if(!isdrag) return;
 	e.preventDefault()
-//	if(((new Date()) - t) > 120) return
+	isdrag = false;
 
-	var xy = getXY(e)
-	var x = xy[0]
-	var y = xy[1]
+	queue.push([pos.x, pos.y, -1])
 
-console.log('click1', x, y, e)
-
-
-//	var out = x + ',' + y
-//	$.post('/click', out, null, 'text');
-});
+	if(!delaypost) delaypost = setTimeout(mousemove, 50)
+})
 
 var scale = 1.0
 var ws;
@@ -458,23 +478,16 @@ $(document).ready(function(e) {
 
 	var lastFrame = null
 	var updateFrame = function(){
-		if (data) {
-			console.log(now(), "multiload!!", data)
-			revokeObjectURL(data)
-			data = null
-		}
-		data = createObjectURL( lastFrame )
-		img.src = data
+		img.src = createObjectURL( lastFrame )
+		lastFrame = null
 	}
 
-	var data;
 	img.onload = function(e) {
 		var img = e.target
 		var url = img.src
 		scale = img.naturalWidth / img.width
 		revokeObjectURL(url)
 //		console.log(now(), 'Freeing blob...', url)
-		data = null
 	};
 
 	function open() {
@@ -493,8 +506,12 @@ $(document).ready(function(e) {
 		ws.onmessage = function(e) {
 			// console.log("RESPONSE", e)
 			// display screen
+
+			if(!lastFrame) {
+				requestAnimationFrame(updateFrame)
+			}
 			lastFrame = e.data
-			requestAnimationFrame(updateFrame)
+
 //			console.log(now(), 'New screen', lastFrame)
 		}
 		ws.onerror = function(e) {

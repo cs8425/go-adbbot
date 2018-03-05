@@ -19,21 +19,21 @@ func abs(a, b uint8) (int64){
 	return c * c
 }
 
-func (b *Bot) FindExistReg(tmpl *Tmpl, times int, delay int) (x int, y int, val float64){
+func (b *LocalBot) FindExistReg(tmpl *Tmpl, times int, delay int) (x int, y int, val float64){
 
 	for i := 0; i < times; i++ {
-		Vlogln(4, "Screencap()", i)
+		Vln(4, "Screencap()", i)
 		img, err := b.Screencap()
 		if err != nil {
 			continue
 		}
 
 		if !tmpl.Region.Empty() {
-			Vlogln(4, "crop", i)
+			Vln(4, "crop", i)
 			var reg image.Rectangle
 			if b.TargetScreen != nil {
 				scriptsize := b.TargetScreen.Size()
-				screensize := b.Screen.Size()
+				screensize := b.ScreenBounds.Size()
 				reg = tmpl.Region
 				newMinX := reg.Min.X * screensize.X / scriptsize.X
 				newMaxX := reg.Max.X * screensize.X / scriptsize.X
@@ -46,26 +46,26 @@ func (b *Bot) FindExistReg(tmpl *Tmpl, times int, delay int) (x int, y int, val 
 				newMaxX := int(float32(reg.Max.X) * scaleX)
 				newMinY := int(float32(reg.Min.Y) * scaleY)
 				newMaxY := int(float32(reg.Max.Y) * scaleY)
-				Vlogln(5, "crop Resize", scaleX, scaleY)*/
-				Vlogln(5, "crop Resize to", reg)
+				Vln(5, "crop Resize", scaleX, scaleY)*/
+				Vln(5, "crop Resize to", reg)
 			} else {
 				reg = img.Bounds().Intersect(tmpl.Region)
 			}
 			img = img.(*image.NRGBA).SubImage(reg)
 		}
 
-		Vlogln(4, "FindP()", i)
+		Vln(4, "FindP()", i)
 		timeStart()
 		if b.TargetScreen != nil {
 			scriptsize := b.TargetScreen.Size()
-			screensize := b.Screen.Size()
+			screensize := b.ScreenBounds.Size()
 			tmplsize := tmpl.Image.Bounds().Size()
 			newX := tmplsize.X * screensize.X / scriptsize.X
 			newY := tmplsize.Y * screensize.Y / scriptsize.Y
 			if (screensize.X == scriptsize.X) && (screensize.Y == scriptsize.Y) {
 				x, y, val = FindP(img, tmpl.Image)
 			} else {
-				Vlogln(5, "Resize to", newX, newY)
+				Vln(5, "Resize to", newX, newY)
 				dstImage := Resize(tmpl.Image, newX, 0, Lanczos)
 				timeEnd("Resize()")
 				x, y, val = FindP(img, dstImage)
@@ -75,37 +75,37 @@ func (b *Bot) FindExistReg(tmpl *Tmpl, times int, delay int) (x int, y int, val 
 		}
 		timeEnd("FindP()")
 		if x != -1 && y != -1 {
-			Vlogln(3, "FindExistP()", x, y, val)
+			Vln(3, "FindExistP()", x, y, val)
 			return
 		}
 		time.Sleep(time.Millisecond * time.Duration(delay))
 	}
 
-	Vlogln(3, "FindExistP()", x, y, val)
+	Vln(3, "FindExistP()", x, y, val)
 	return
 }
 
-func (b *Bot) FindExistP(subimg image.Image, times int, delay int) (x int, y int, val float64){
+func (b *LocalBot) FindExistP(subimg image.Image, times int, delay int) (x int, y int, val float64){
 
 	for i := 0; i < times; i++ {
-		Vlogln(4, "Screencap()", i)
+		Vln(4, "Screencap()", i)
 		img, err := b.Screencap()
 		if err != nil {
 			continue
 		}
 
-		Vlogln(4, "FindP()", i)
+		Vln(4, "FindP()", i)
 		timeStart()
 		x, y, val = FindP(img, subimg)
 		timeEnd("FindP()")
 		if x != -1 && y != -1 {
-			Vlogln(3, "FindExistP()", x, y, val)
+			Vln(3, "FindExistP()", x, y, val)
 			return
 		}
 		time.Sleep(time.Millisecond * time.Duration(delay))
 	}
 
-	Vlogln(3, "FindExistP()", x, y, val)
+	Vln(3, "FindExistP()", x, y, val)
 	return
 }
 
@@ -123,7 +123,7 @@ func FindP(img image.Image, subimg image.Image) (x int, y int, val float64) {
 	var min int64 = int64(subimg.Bounds().Dx() * subimg.Bounds().Dy() * 255 * 255 * 3) / 32
 //	var min int64 = 0x7fffffffffffffff
 
-	Vlogln(4, "Find @ = ", startX, endX, startY, endY)
+	Vln(4, "Find @ = ", startX, endX, startY, endY)
 
 	if nrgba, ok := img.(*image.NRGBA); ok {
 		if snrgba, ok := subimg.(*image.NRGBA); ok {
@@ -131,7 +131,7 @@ func FindP(img image.Image, subimg image.Image) (x int, y int, val float64) {
 			var mutex = &sync.Mutex{}
 
 			parallel(endY - startY, 1, func(partStart, partEnd int) {
-//				Vlogln(2, "partStart, partEnd = ", partStart, partEnd)
+//				Vln(2, "partStart, partEnd = ", partStart, partEnd)
 				partStart += startY
 				partEnd += startY
 				for i := partStart; i < partEnd; i++ {
@@ -147,7 +147,7 @@ func FindP(img image.Image, subimg image.Image) (x int, y int, val float64) {
 						mutex.Unlock()
 					}
 				}
-//				Vlogln(2, "min, x, y = ", min, x, y)
+//				Vln(2, "min, x, y = ", min, x, y)
 			})
 
 		}
@@ -175,7 +175,7 @@ func Find(img image.Image, subimg image.Image) (x int, y int, val float64) {
 	var min int64 = int64(subimg.Bounds().Dx() * subimg.Bounds().Dy() * 255 * 255 * 3) / 32
 //	var min int64 = 0x7fffffffffffffff
 
-	Vlogln(4, "Find @ = ", startX, endX, startY, endY)
+	Vln(4, "Find @ = ", startX, endX, startY, endY)
 
 	if nrgba, ok := img.(*image.NRGBA); ok {
 		if snrgba, ok := subimg.(*image.NRGBA); ok {

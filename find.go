@@ -16,8 +16,8 @@ var DEV = flag.String("dev", "", "select device")
 var TMPL = flag.String("t", "tmpl.png", "template image")
 var IN = flag.String("i", "", "input image")
 
-var sizeX = flag.Int("sizeX", 448, "sizeX")
-var sizeY = flag.Int("sizeY", 816, "sizeY")
+var sizeX = flag.Int("sizeX", 720, "sizeX")
+var sizeY = flag.Int("sizeY", 1280, "sizeY")
 
 func main() {
 
@@ -26,8 +26,8 @@ func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	adbbot.Verbosity = *verbosity
-	bot := adbbot.NewBot(*DEV, *ADB)
-	if *sizeX > 0 && *sizeY > 0{
+	bot := adbbot.NewLocalBot(*DEV, *ADB)
+	if *sizeX > 0 && *sizeY > 0 {
 		bot.ScriptScreen(0,0, *sizeX, *sizeY)
 	}
 

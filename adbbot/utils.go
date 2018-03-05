@@ -32,7 +32,7 @@ func timeStart() (){
 }
 
 func timeEnd(info string) (){
-	Vlogf(3, info + " took %s", time.Since(timeT0))
+	Vf(3, info + " took %s", time.Since(timeT0))
 }
 
 func NewTmpl(filename string, reg image.Rectangle) (*Tmpl, error){

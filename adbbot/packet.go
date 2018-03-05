@@ -1,4 +1,4 @@
-package main
+package adbbot
 
 import (
 	"encoding/binary"
@@ -6,9 +6,9 @@ import (
 	"io"
 //	"fmt"
 
-//	"compress/gzip"
 	"compress/flate"
 	"net"
+	"time"
 	"github.com/golang/snappy"
 )
 
@@ -26,7 +26,6 @@ func ReadTagByte(conn io.Reader) ([]byte, error){
 	}
 
 	taglen := int(buf[0] ^ xorTag)
-//	n, err := conn.Read(buf[:taglen])
 	n, err := io.ReadFull(conn, buf[:taglen])
 	if err != nil {
 		return nil, err
@@ -89,7 +88,6 @@ func ReadVTagByte(conn io.Reader) ([]byte, error){
 
 	buf := make([]byte, 0, taglen)
 	n, err := io.ReadFull(conn, buf[:taglen])
-//	n, err := conn.Read(buf[:taglen])
 	if err != nil {
 		return nil, err
 	}
@@ -154,6 +152,44 @@ func (c *CompStream) Close() error {
 	return c.Conn.Close()
 }
 
+// LocalAddr satisfies net.Conn interface
+func (c *CompStream) LocalAddr() net.Addr {
+	if ts, ok := c.Conn.(interface {
+		LocalAddr() net.Addr
+	}); ok {
+		return ts.LocalAddr()
+	}
+	return nil
+}
+
+// RemoteAddr satisfies net.Conn interface
+func (c *CompStream) RemoteAddr() net.Addr {
+	if ts, ok := c.Conn.(interface {
+		RemoteAddr() net.Addr
+	}); ok {
+		return ts.RemoteAddr()
+	}
+	return nil
+}
+
+func (c *CompStream) SetReadDeadline(t time.Time) error {
+	return c.Conn.SetReadDeadline(t)
+}
+
+func (c *CompStream) SetWriteDeadline(t time.Time) error {
+	return c.Conn.SetWriteDeadline(t)
+}
+
+func (c *CompStream) SetDeadline(t time.Time) error {
+	if err := c.SetReadDeadline(t); err != nil {
+		return err
+	}
+	if err := c.SetWriteDeadline(t); err != nil {
+		return err
+	}
+	return nil
+}
+
 func NewCompStream(conn net.Conn, level int) *CompStream {
 	c := new(CompStream)
 	c.Conn = conn
@@ -165,7 +201,6 @@ func NewCompStream(conn net.Conn, level int) *CompStream {
 type FlateStream struct {
 	Conn net.Conn
 	w    *flate.Writer
-//	r    *gzip.Reader
 	r    io.ReadCloser
 }
 
@@ -183,11 +218,48 @@ func (c *FlateStream) Close() error {
 	return c.Conn.Close()
 }
 
+// LocalAddr satisfies net.Conn interface
+func (c *FlateStream) LocalAddr() net.Addr {
+	if ts, ok := c.Conn.(interface {
+		LocalAddr() net.Addr
+	}); ok {
+		return ts.LocalAddr()
+	}
+	return nil
+}
+
+// RemoteAddr satisfies net.Conn interface
+func (c *FlateStream) RemoteAddr() net.Addr {
+	if ts, ok := c.Conn.(interface {
+		RemoteAddr() net.Addr
+	}); ok {
+		return ts.RemoteAddr()
+	}
+	return nil
+}
+
+func (c *FlateStream) SetReadDeadline(t time.Time) error {
+	return c.Conn.SetReadDeadline(t)
+}
+
+func (c *FlateStream) SetWriteDeadline(t time.Time) error {
+	return c.Conn.SetWriteDeadline(t)
+}
+
+func (c *FlateStream) SetDeadline(t time.Time) error {
+	if err := c.SetReadDeadline(t); err != nil {
+		return err
+	}
+	if err := c.SetWriteDeadline(t); err != nil {
+		return err
+	}
+	return nil
+}
+
 func NewFlateStream(conn net.Conn, level int) *FlateStream {
 	c := new(FlateStream)
 	c.Conn = conn
 	c.w, _ = flate.NewWriter(conn, level)
-//	c.r, _ = gzip.NewReader(conn)
 	c.r = flate.NewReader(conn)
 	return c
 }

@@ -1,4 +1,4 @@
-// go build -o daemon daemon.go packet.go
+// go build -o daemon daemon.go
 package main
 
 import (
@@ -8,11 +8,6 @@ import (
 	"runtime"
 	"time"
 
-	"io"
-	"bytes"
-	"image"
-	"image/png"
-
 	"../adbbot"
 )
 
@@ -21,6 +16,7 @@ var ADB = flag.String("adb", "adb", "adb exec path")
 var DEV = flag.String("dev", "", "select device")
 
 var OnDevice = flag.Bool("od", false, "run on device")
+var compress = flag.Bool("comp", false, "compress connection")
 
 var bindAddr = flag.String("l", ":6900", "")
 
@@ -33,7 +29,7 @@ func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	adbbot.Verbosity = *verbosity
-	bot := adbbot.NewBot(*DEV, *ADB)
+	bot := adbbot.NewLocalBot(*DEV, *ADB)
 
 	// run on android by adb user(shell)
 	bot.IsOnDevice = *OnDevice
@@ -45,163 +41,34 @@ func main() {
 		return
 	}
 
-	screen := make([]byte, 0)
-	go screencap(bot, &screen)
+	m := adbbot.NewMonkey(bot, 1080)
+	defer m.Close()
+	bot.Input = m
 
 	ln, err := net.Listen("tcp", *bindAddr)
 	if err != nil {
-		Vln(2, "[server]Error listening:", err)
+		Vln(1, "[Daemon]Error listening:", err)
 		return
 	}
-	defer ln.Close()
 	Vln(1, "daemon start at", *bindAddr)
 
-	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			log.Println(err)
-			continue
-		}
-		go handleConn(conn, bot, &screen)
-	}
+//	go screencap(bot)
 
+	daemon, err := adbbot.NewDaemon(ln, bot, *compress)
+	defer daemon.Close()
+	daemon.Listen()
 }
 
-var newclients chan io.ReadWriteCloser
-func handleConn(p1 net.Conn, bot *adbbot.Bot, screen *[]byte) {
-	for {
-		todo, err := ReadTagStr(p1)
-		if err != nil {
-			Vln(2, "[todo]err", err)
-			return
-		}
-		Vln(4, "[todo]", todo)
-
-		switch todo {
-		case "Click":
-			x, y, err := readXY(p1)
-			if err != nil {
-				Vln(2, "[todo][Click]err", err)
-				return
-			}
-			Vln(3, "[Click]", x, y)
-			bot.Click(image.Pt(x, y), false)
-		case "Swipe":
-			x0, y0, err := readXY(p1)
-			if err != nil {
-				Vln(2, "[todo][Swipe]err1", err)
-				return
-			}
-
-			x1, y1, err := readXY(p1)
-			if err != nil {
-				Vln(2, "[todo][Swipe]err2", err)
-				return
-			}
-
-			dt, err := ReadVLen(p1)
-			if err != nil {
-				Vln(2, "[dt]err", err)
-				return
-			}
-
-			Vln(3, "[Swipe]", dt, x0, y0, ">>", x1, y1)
-			bot.SwipeT(image.Pt(x0, y0), image.Pt(x1, y1), int(dt), false)
-		case "Key":
-			op, err := ReadTagStr(p1)
-			if err != nil {
-				Vln(2, "[todo][Key]err", err)
-				return
-			}
-			Vln(3, "[Key]", op)
-			switch op {
-			case "home":
-				bot.KeyHome()
-			case "back":
-				bot.KeyBack()
-			case "task":
-				bot.KeySwitch()
-			case "power":
-				bot.KeyPower()
-			}
-		case "ScreenSize":
-			WriteVLen(p1, int64(bot.Screen.Dx()))
-			WriteVLen(p1, int64(bot.Screen.Dy()))
-		case "Screencap":
-			//bot.Screencap()
-			//bot.Last_screencap
-			WriteVTagByte(p1, *screen)
-		case "poll":
-			Vln(3, "[todo][poll]", p1)
-			conn := NewCompStream(p1, 1)
-//			conn := NewFlateStream(p1, 1)
-			newclients <- conn
-		}
-	}
-}
-
-func readXY(p1 net.Conn) (x, y int, err error) {
-	var x0, y0 int64
-	x0, err = ReadVLen(p1)
-	if err != nil {
-		Vln(2, "[x]err", err)
-		return
-	}
-	y0, err = ReadVLen(p1)
-	if err != nil {
-		Vln(2, "[y]err", err)
-		return
-	}
-	return int(x0), int(y0), nil
-}
-
-func screencap(bot *adbbot.Bot, screen *[]byte) {
-	var buf bytes.Buffer
-
-	newclients = make(chan io.ReadWriteCloser, 16)
-	clients := make(map[io.ReadWriteCloser]io.ReadWriteCloser, 0)
-
-	encoder := png.Encoder{
-//		CompressionLevel: png.BestSpeed,
-		CompressionLevel: png.NoCompression,
-	}
-
+func screencap(bot adbbot.Bot) {
 	limit := time.Duration(*reflash) * time.Millisecond
 
 	for {
 		start := time.Now()
-		_, err := bot.Screencap()
+		err := bot.TriggerScreencap()
 		if err != nil {
 			return
 		}
-		Vln(4, "[screen][poll]", time.Since(start))
-
-		encoder.Encode(&buf, bot.Last_screencap)
-		*screen = buf.Bytes()
-		buf.Reset()
-
-/*		rawimg, ok := bot.Last_screencap.(*image.NRGBA)
-		if !ok {
-			encoder.Encode(&buf, bot.Last_screencap)
-			*screen = buf.Bytes()
-			buf.Reset()
-		}
-		*screen = []byte(rawimg.Pix)*/
-
-		Vln(4, "[screen][encode]", len(*screen), time.Since(start))
-
-		for i, c := range clients {
-			err := WriteVTagByte(c, *screen)
-			if err != nil {
-				Vln(2, "[screen][push][err]", err)
-				c.Close()
-				delete(clients, i)
-			}
-		}
-		for len(newclients) > 0 {
-			client := <- newclients
-			clients[client] = client
-		}
+		Vln(4, "[screen][trigger]", time.Since(start))
 
 		if time.Since(start) < limit {
 			time.Sleep(limit - time.Since(start))
