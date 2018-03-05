@@ -22,6 +22,7 @@ type Daemon struct {
 	captime     time.Time // lock?
 	triggerCh   chan struct{}
 	screenBuf   bytes.Buffer
+	bufReady    chan struct{}
 
 //	newclients  chan io.ReadWriteCloser
 }
@@ -32,10 +33,10 @@ func NewDaemon(ln net.Listener, bot Bot, comp bool) (*Daemon, error) {
 		bot: bot,
 		compress: comp,
 		triggerCh: make(chan struct{}, 1),
+		bufReady: make(chan struct{}),
 		Reflash: 500 * time.Millisecond,
 	}
 
-	d.triggerCh <- struct{}{}
 	go d.screenCoder()
 
 	return &d, nil
@@ -87,6 +88,12 @@ func (d *Daemon) screenCoder() {
 			encoder.Encode(&d.screenBuf, d.bot.GetLastScreencap())
 //			jpeg.Encode(&d.screenBuf, d.bot.GetLastScreencap(), option)
 			Vln(4, "[screen][encode]", time.Since(d.captime))
+
+			select {
+			case <- d.bufReady:
+			default:
+				close(d.bufReady)
+			}
 		}
 	}
 
@@ -113,15 +120,16 @@ func (b *pngBuf) Put(*png.EncoderBuffer) { }
 
 func (d *Daemon) handleConn(p1 net.Conn) {
 
-	screenCh := make(chan []byte, 1)
+	screenCh := make(chan struct{}, 1)
 	defer close(screenCh)
-	go func (p1 net.Conn, ch chan []byte) {
+	go func (p1 net.Conn, ch chan struct{}) {
+		<- d.bufReady
 		for {
-			buf, ok := <- ch
+			_, ok := <- ch
 			if !ok {
 				return
 			}
-			WriteVTagByte(p1, buf)
+			WriteVTagByte(p1, d.screenBuf.Bytes())
 		}
 	}(p1, screenCh)
 
@@ -172,11 +180,7 @@ func (d *Daemon) handleConn(p1 net.Conn) {
 			WriteVLen(p1, int64(d.bot.ScreenBounds.Dy()))*/
 		case "GetScreen":
 			//WriteVTagByte(p1, buf.Bytes())
-			select {
-			case <- screenCh:
-			default:
-			}
-			screenCh <- d.screenBuf.Bytes()
+			screenCh <- struct{}{}
 
 /*		case "poll":
 			Vln(3, "[todo][poll]", p1)
