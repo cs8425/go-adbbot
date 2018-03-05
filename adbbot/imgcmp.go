@@ -19,19 +19,19 @@ func abs(a, b uint8) (int64){
 	return c * c
 }
 
-func (b *LocalBot) FindExistReg(tmpl *Tmpl, times int, delay int) (x int, y int, val float64){
+func FindExistReg(b Bot, tmpl *Tmpl, times int, delay int) (x int, y int, val float64){
 
 	for i := 0; i < times; i++ {
-		Vln(4, "Screencap()", i)
+		Vln(5, "Screencap()", i)
 		img, err := b.Screencap()
 		if err != nil {
 			continue
 		}
 
 		if !tmpl.Region.Empty() {
-			Vln(4, "crop", i)
+			Vln(5, "crop", i)
 			var reg image.Rectangle
-			if b.TargetScreen != nil {
+			/*if b.TargetScreen != nil {
 				scriptsize := b.TargetScreen.Size()
 				screensize := b.ScreenBounds.Size()
 				reg = tmpl.Region
@@ -40,23 +40,17 @@ func (b *LocalBot) FindExistReg(tmpl *Tmpl, times int, delay int) (x int, y int,
 				newMinY := reg.Min.Y * screensize.Y / scriptsize.Y
 				newMaxY := reg.Max.Y * screensize.Y / scriptsize.Y
 				reg = image.Rect(newMinX, newMinY, newMaxX, newMaxY)
-				/*scaleX := float32(screensize.X) / float32(scriptsize.X)
-				scaleY := float32(screensize.Y) / float32(scriptsize.Y)
-				newMinX := int(float32(reg.Min.X) * scaleX)
-				newMaxX := int(float32(reg.Max.X) * scaleX)
-				newMinY := int(float32(reg.Min.Y) * scaleY)
-				newMaxY := int(float32(reg.Max.Y) * scaleY)
-				Vln(5, "crop Resize", scaleX, scaleY)*/
-				Vln(5, "crop Resize to", reg)
+				Vln(6, "crop Resize to", reg)
 			} else {
 				reg = img.Bounds().Intersect(tmpl.Region)
-			}
+			}*/
+			reg = img.Bounds().Intersect(tmpl.Region)
 			img = img.(*image.NRGBA).SubImage(reg)
 		}
 
-		Vln(4, "FindP()", i)
+		Vln(5, "FindP()", i)
 		timeStart()
-		if b.TargetScreen != nil {
+		/*if b.TargetScreen != nil {
 			scriptsize := b.TargetScreen.Size()
 			screensize := b.ScreenBounds.Size()
 			tmplsize := tmpl.Image.Bounds().Size()
@@ -72,40 +66,41 @@ func (b *LocalBot) FindExistReg(tmpl *Tmpl, times int, delay int) (x int, y int,
 			}
 		} else {
 			x, y, val = FindP(img, tmpl.Image)
-		}
+		}*/
+		x, y, val = FindP(img, tmpl.Image)
 		timeEnd("FindP()")
 		if x != -1 && y != -1 {
-			Vln(3, "FindExistP()", x, y, val)
+			Vln(4, "FindExistP()", x, y, val)
 			return
 		}
 		time.Sleep(time.Millisecond * time.Duration(delay))
 	}
 
-	Vln(3, "FindExistP()", x, y, val)
+	Vln(4, "FindExistP()", x, y, val)
 	return
 }
 
-func (b *LocalBot) FindExistP(subimg image.Image, times int, delay int) (x int, y int, val float64){
+func FindExistP(b Bot, subimg image.Image, times int, delay int) (x int, y int, val float64){
 
 	for i := 0; i < times; i++ {
-		Vln(4, "Screencap()", i)
+		Vln(5, "Screencap()", i)
 		img, err := b.Screencap()
 		if err != nil {
 			continue
 		}
 
-		Vln(4, "FindP()", i)
+		Vln(5, "FindP()", i)
 		timeStart()
 		x, y, val = FindP(img, subimg)
 		timeEnd("FindP()")
 		if x != -1 && y != -1 {
-			Vln(3, "FindExistP()", x, y, val)
+			Vln(4, "FindExistP()", x, y, val)
 			return
 		}
 		time.Sleep(time.Millisecond * time.Duration(delay))
 	}
 
-	Vln(3, "FindExistP()", x, y, val)
+	Vln(4, "FindExistP()", x, y, val)
 	return
 }
 
@@ -123,13 +118,11 @@ func FindP(img image.Image, subimg image.Image) (x int, y int, val float64) {
 	var min int64 = int64(subimg.Bounds().Dx() * subimg.Bounds().Dy() * 255 * 255 * 3) / 32
 //	var min int64 = 0x7fffffffffffffff
 
-	Vln(4, "Find @ = ", startX, endX, startY, endY)
+	Vln(5, "Find @ = ", startX, endX, startY, endY)
 
 	if nrgba, ok := img.(*image.NRGBA); ok {
 		if snrgba, ok := subimg.(*image.NRGBA); ok {
-
 			var mutex = &sync.Mutex{}
-
 			parallel(endY - startY, 1, func(partStart, partEnd int) {
 //				Vln(2, "partStart, partEnd = ", partStart, partEnd)
 				partStart += startY
@@ -137,7 +130,7 @@ func FindP(img image.Image, subimg image.Image) (x int, y int, val float64) {
 				for i := partStart; i < partEnd; i++ {
 					for j := startX; j < endX; j++ {
 
-						tmp := CmpAt(nrgba, snrgba, j, i, min)
+						tmp := CmpAt(nrgba, snrgba, j, i, min) //CmpAt(nrgba, snrgba, j, i, min)
 						mutex.Lock()
 						if tmp < min {
 							min = tmp
@@ -149,7 +142,6 @@ func FindP(img image.Image, subimg image.Image) (x int, y int, val float64) {
 				}
 //				Vln(2, "min, x, y = ", min, x, y)
 			})
-
 		}
 	}
 

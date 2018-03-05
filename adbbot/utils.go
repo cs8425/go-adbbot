@@ -32,10 +32,10 @@ func timeStart() (){
 }
 
 func timeEnd(info string) (){
-	Vf(3, info + " took %s", time.Since(timeT0))
+	Vf(4, info + " took %s", time.Since(timeT0))
 }
 
-func NewTmpl(filename string, reg image.Rectangle) (*Tmpl, error){
+func NewTmpl(filename string, reg image.Rectangle) (*Tmpl, error) {
 
 	img, err:= OpenImage(filename)
 	if err != nil {
@@ -51,17 +51,29 @@ func NewTmpl(filename string, reg image.Rectangle) (*Tmpl, error){
 	return &tmpl, nil
 }
 
-func NewRect(x, y, xp, yp int) (image.Rectangle){
+func LoadTmpl(filename string, reg image.Rectangle) (*Tmpl) {
+	tmpl, _ := NewTmpl(filename, reg)
+	return tmpl
+}
+
+func (t *Tmpl) Center(x, y int) (image.Point) {
+
+	bb := t.Image.Bounds()
+	x = bb.Dx() / 2 + x
+	y = bb.Dy() / 2 + y
+
+	return image.Pt(x, y)
+}
+
+
+func Rect(x, y, xp, yp int) (image.Rectangle){
 	return image.Rect(x, y, x+xp, y+yp)
 }
 
-func NewRectAbs(x, y, x2, y2 int) (image.Rectangle){
+func RectAbs(x, y, x2, y2 int) (image.Rectangle){
 	return image.Rect(x, y, x2, y2)
 }
 
-func NewRectAll() (image.Rectangle){
-	return image.ZR
-}
 
 
 

@@ -31,13 +31,6 @@ type LocalBot struct {
 
 
 	Input
-
-
-	// shortcuts
-	NewTmpl                  func(filename string, reg image.Rectangle) (*Tmpl, error)
-	Rect, NewRect            func(x, y, xp, yp int) (image.Rectangle)
-	RectAbs, NewRectAbs      func(x, y, x2, y2 int) (image.Rectangle)
-	RectAll, NewRectAll      func() (image.Rectangle)
 }
 
 func NewLocalBot(device, exec string) (*LocalBot) {
@@ -53,19 +46,10 @@ func NewLocalBot(device, exec string) (*LocalBot) {
 
 //		Screen: nil,
 		TargetScreen: nil,
-
-		Rect: NewRect,
-		RectAbs: NewRectAbs,
-		RectAll: NewRectAll,
 	}
 
 	input := NewCmdInput(&b)
 	b.Input = input
-
-	b.NewTmpl = NewTmpl
-	b.NewRect = NewRect
-	b.NewRectAbs = NewRectAbs
-	b.NewRectAll = NewRectAll
 
 	if device != "" {
 		b.devstr = " -s " + device

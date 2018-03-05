@@ -3,7 +3,6 @@ package adbbot
 import (
 	"bytes"
 	"image"
-	"image/png"
 	"net"
 //	"io"
 	"time"
@@ -148,7 +147,7 @@ func (b *RemoteBot) Screencap() (img image.Image, err error) {
 
 	// decode
 	r := bytes.NewReader(pngByte)
-	img, err = png.Decode(r)
+	img, err = Decode(r)
 	if err != nil {
 		return
 	}
