@@ -22,6 +22,8 @@ var bindAddr = flag.String("l", ":6900", "")
 
 var reflash = flag.Int("r", 1000, "update screen minimum time (ms)")
 
+var scale = flag.Float64("scale", 1.0, "screen resize after capture")
+
 func main() {
 
 	log.SetFlags(log.Ldate|log.Ltime)
@@ -33,6 +35,8 @@ func main() {
 
 	// run on android by adb user(shell)
 	bot.IsOnDevice = *OnDevice
+
+	bot.SetScale(*scale)
 
 	Vln(2, "[adb]", "wait-for-device")
 	_, err := bot.Adb("wait-for-device")

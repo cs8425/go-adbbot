@@ -45,6 +45,7 @@ type Monkey struct {
 	Port      int
 	KeyDelta  time.Duration
 
+	bot       Bot
 	conn	  net.Conn
 }
 
@@ -70,6 +71,8 @@ TRYCONN:
 	m := Monkey{
 		Port: port,
 		KeyDelta: 100 * time.Millisecond,
+
+		bot: b,
 		conn: conn,
 	}
 
@@ -87,6 +90,7 @@ func (m *Monkey) send(cmd string) (err error) {
 }
 
 func (m *Monkey) Tap(loc image.Point) (err error) {
+	loc = m.bot.Remap(loc)
 	str := fmt.Sprintf("tap %d %d\n", loc.X, loc.Y)
 	err = m.send(str)
 	return
@@ -105,6 +109,7 @@ func (m *Monkey) Press(in string) (err error) {
 }
 
 func (m *Monkey) Touch(loc image.Point, ty KeyAction) (err error) {
+	loc = m.bot.Remap(loc)
 	str := fmt.Sprintf("touch %s %d %d\n", actmap[ty], loc.X, loc.Y)
 	err = m.send(str)
 	return
@@ -170,6 +175,7 @@ func NewCmdInput(b Bot) (*CmdInput) {
 }
 
 func (i *CmdInput) Click(loc image.Point) (err error) {
+	loc = i.bot.Remap(loc)
 	str := fmt.Sprintf("input tap %d %d", loc.X, loc.Y)
 	_, err = i.bot.Shell(str)
 //	_, err = i.bot.Shell("input tap " + strconv.Itoa(loc.X) + " " + strconv.Itoa(loc.Y))
@@ -177,6 +183,7 @@ func (i *CmdInput) Click(loc image.Point) (err error) {
 }
 
 func (i *CmdInput) SwipeT(p0,p1 image.Point, time int) (err error) {
+	p0, p1 = i.bot.Remap(p0), i.bot.Remap(p1)
 	str := fmt.Sprintf("input swipe %d %d %d %d %d", p0.X, p0.Y, p1.X, p1.Y, time)
 	_, err = i.bot.Shell(str)
 //	_, err = i.bot.Shell("input swipe " + strconv.Itoa(p0.X) + " " + strconv.Itoa(p0.Y) + " " + strconv.Itoa(p1.X) + " " + strconv.Itoa(p1.Y) + " " + strconv.Itoa(time))

@@ -24,6 +24,7 @@ type LocalBot struct {
 
 	ScreenBounds    image.Rectangle
 
+	scale           float64
 
 	devstr          string
 	width           int
@@ -46,6 +47,7 @@ func NewLocalBot(device, exec string) (*LocalBot) {
 
 //		Screen: nil,
 		TargetScreen: nil,
+		scale: 1.0,
 	}
 
 	input := NewCmdInput(&b)
@@ -124,6 +126,12 @@ func (b *LocalBot) TriggerScreencap() (err error) {
 		Pix: screencap[12:],
 		Stride: b.width * 4, // bytes
 		Rect: image.Rect(0, 0, b.width, b.height),
+	}
+
+	if b.scale != 1.0 {
+		screensize := b.ScreenBounds.Size()
+		newX := int(float64(screensize.X) * b.scale)
+		img = Resize(img, newX, 0, Lanczos)
 	}
 
 	if err == nil {
@@ -205,12 +213,23 @@ func (b *LocalBot) KillApp(app string) (err error){
 	return
 }
 
+func (b *LocalBot) SetScale(scale float64) () {
+	b.scale = scale
+}
+
+func (b *LocalBot) Remap(loc image.Point) (image.Point) {
+	if b.scale != 1.0 {
+		return image.Pt(int(float64(loc.X) / b.scale), int(float64(loc.Y) / b.scale))
+	}
+	return loc
+}
+
 func (b *LocalBot) ScriptScreen(x0, y0, dx, dy int) () {
 	b.TargetScreen = &image.Rectangle{image.Pt(x0, y0), image.Pt(dx, dy)}
 	Vln(4, "set Script Screen", x0, y0, dx, dy, b.TargetScreen)
 }
 
-func (b *LocalBot) Remap(loc image.Point) (image.Point){
+/*func (b *LocalBot) Remap(loc image.Point) (image.Point){
 	x := loc.X
 	y := loc.Y
 	Vln(4, "Remap", b.TargetScreen, b.ScreenBounds)
@@ -222,6 +241,6 @@ func (b *LocalBot) Remap(loc image.Point) (image.Point){
 		Vln(4, "Remap to", x, y)
 	}
 	return image.Pt(x, y)
-}
+}*/
 
 

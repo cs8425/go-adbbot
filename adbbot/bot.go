@@ -29,6 +29,7 @@ type Bot interface {
 	SaveScreen(imagefile string) (err error)
 
 //	ScreenBounds()           (image.Rectangle)
+	Remap(loc image.Point)   (image.Point)
 
 	// input
 	Input

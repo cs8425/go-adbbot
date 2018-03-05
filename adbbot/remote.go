@@ -182,6 +182,10 @@ func (b *RemoteBot) KillApp(app string) (err error) {
 	return
 }
 
+func (b *RemoteBot) Remap(loc image.Point) (image.Point) {
+	return loc
+}
+
 
 // inputs
 func (b *RemoteBot) Tap(loc image.Point) (err error) {
