@@ -26,8 +26,6 @@ type Input interface {
 	Click(loc image.Point) (err error)
 	SwipeT(p0,p1 image.Point, time int) (err error)
 
-//	Touch(loc image.Point, ty string) (err error)
-//	Key(in string, ty string) (err error)
 	Touch(loc image.Point, ty KeyAction) (err error)
 	Key(in string, ty KeyAction) (err error)
 

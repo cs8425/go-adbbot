@@ -3,11 +3,13 @@ package adbbot
 import (
 	"net"
 	"time"
+//	"sync"
 
 //	"io"
 	"bytes"
 	"image"
 	"image/png"
+	"image/jpeg"
 )
 
 type Daemon struct {
@@ -60,12 +62,23 @@ func (d *Daemon) Close() (error) {
 	return d.ln.Close()
 }
 
+type pngBuf png.EncoderBuffer
+func (b *pngBuf) Get() (*png.EncoderBuffer) {
+	return (*png.EncoderBuffer)(b)
+}
+func (b *pngBuf) Put(*png.EncoderBuffer) { }
+
 func (d *Daemon) handleConn(p1 net.Conn) {
 	var buf bytes.Buffer
 
+	// jpg option
+	option := &jpeg.Options{100}
+
+	encBuf := &pngBuf{}
 	encoder := png.Encoder{
 //		CompressionLevel: png.BestSpeed,
 		CompressionLevel: png.NoCompression,
+		BufferPool: png.EncoderBufferPool(encBuf),
 	}
 
 	for {
@@ -105,18 +118,28 @@ func (d *Daemon) handleConn(p1 net.Conn) {
 			d.bot.Key(keycode, KeyAction(ev))
 
 /*		case "ScreenSize":
-			WriteVLen(p1, int64(d.bot.Screen.Dx()))
-			WriteVLen(p1, int64(d.bot.Screen.Dy()))*/
+			WriteVLen(p1, int64(d.bot.ScreenBounds.Dx()))
+			WriteVLen(p1, int64(d.bot.ScreenBounds.Dy()))*/
 		case "Screencap":
+			if time.Since(d.captime) >= d.Reflash { // keep away from impossible screencap frequency
+				d.captime = time.Now()
+				d.bot.TriggerScreencap()
+				Vln(4, "[screen][trigger]", time.Since(d.captime))
+				buf.Reset()
+				encoder.Encode(&buf, d.bot.GetLastScreencap())
+				Vln(4, "[screen][encode]", time.Since(d.captime))
+			}
+		case "Screencap2":
 			if time.Since(d.captime) > d.Reflash { // keep away from impossible screencap frequency
 				d.captime = time.Now()
 				d.bot.TriggerScreencap()
+				Vln(4, "[screen][trigger]", time.Since(d.captime))
+				buf.Reset()
+				jpeg.Encode(&buf, d.bot.GetLastScreencap(), option)
+				Vln(4, "[screen][encode]", time.Since(d.captime))
 			}
-
 		case "GetScreen":
-			encoder.Encode(&buf, d.bot.GetLastScreencap())
 			WriteVTagByte(p1, buf.Bytes())
-			buf.Reset()
 
 /*		case "poll":
 			Vln(3, "[todo][poll]", p1)

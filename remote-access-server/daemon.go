@@ -1,4 +1,4 @@
-// go build -o daemon daemon.go packet.go framebuffer.go
+// go build -o daemon daemon.go packet.go
 package main
 
 import (
@@ -13,7 +13,7 @@ import (
 	"image"
 	"image/png"
 
-	"fmt"
+//	"fmt"
 
 	"../adbbot"
 )
@@ -47,8 +47,9 @@ func main() {
 		return
 	}
 
-	m := NewMonkey(bot, 1080)
+	m := adbbot.NewMonkey(bot, 1080)
 	defer m.Close()
+	bot.Input = m
 
 	screen := make([]byte, 0)
 	go screencap(bot, &screen)
@@ -67,17 +68,17 @@ func main() {
 			log.Println(err)
 			continue
 		}
-		go handleConn(conn, bot, &screen, m)
+		go handleConn(conn, bot, &screen)
 	}
 
 }
 
 var newclients chan io.ReadWriteCloser
-func handleConn(p1 net.Conn, bot *adbbot.LocalBot, screen *[]byte, m *Monkey) {
-	evmap := map[int64]string{
-		-1: "up",
-		0: "move",
-		1: "down",
+func handleConn(p1 net.Conn, bot *adbbot.LocalBot, screen *[]byte) {
+	evmap := map[int64]adbbot.KeyAction{
+		-1: adbbot.KEY_UP,
+		0: adbbot.KEY_MV,
+		1: adbbot.KEY_DOWN,
 	}
 
 	keymap := map[string]string{
@@ -107,13 +108,13 @@ func handleConn(p1 net.Conn, bot *adbbot.LocalBot, screen *[]byte, m *Monkey) {
 				Vln(2, "[todo][Touch][Ev]err", err)
 				return
 			}
-			evstr, ok := evmap[ev]
+			evcode, ok := evmap[ev]
 			if !ok {
 				Vln(2, "[todo][Touch][EvCode]err", ev)
 				return
 			}
-			Vln(3, "[Touch]", x, y, evstr)
-			m.Touch(image.Pt(x, y), evstr)
+			Vln(3, "[Touch]", x, y, evcode)
+			bot.Touch(image.Pt(x, y), evcode)
 
 		case "Key":
 			op, err := ReadTagStr(p1)
@@ -127,19 +128,19 @@ func handleConn(p1 net.Conn, bot *adbbot.LocalBot, screen *[]byte, m *Monkey) {
 				return
 			}
 
-			evstr, ok := evmap[ev]
+			evcode, ok := evmap[ev]
 			if !ok {
 				Vln(2, "[todo][Key][EvCode]err", ev)
 				return
 			}
-			Vln(3, "[Key]", evstr)
+			Vln(3, "[Key]", evcode)
 
 			keycode, ok := keymap[op]
 			if !ok {
 				Vln(2, "[todo][Key][Code]err", op)
 				return
 			}
-			m.Key(keycode, evstr)
+			bot.Key(keycode, evcode)
 
 		case "ScreenSize":
 			WriteVLen(p1, int64(bot.ScreenBounds.Dx()))
@@ -237,82 +238,5 @@ func Vln(level int, v ...interface{}) {
 	if level <= *verbosity {
 		log.Println(v...)
 	}
-}
-
-type Monkey struct {
-	Port    int
-	conn	net.Conn
-}
-
-func NewMonkey(b adbbot.Bot, port int) (*Monkey) {
-
-	forwardCmd := fmt.Sprintf("forward tcp:%d tcp:%d", port, port)
-	b.Adb(forwardCmd)
-
-	monkeyCmd := fmt.Sprintf("monkey --port %d", port)
-	go b.Shell(monkeyCmd) // in background
-
-
-	addr := fmt.Sprintf("127.0.0.1:%d", port)
-
-TRYCONN:
-	conn, err := net.Dial("tcp", addr)
-	if err != nil {
-		Vln(3, "[monkey][conn]err", err)
-		time.Sleep(1000 * time.Millisecond)
-		goto TRYCONN
-	}
-	m := Monkey{
-		Port: port,
-		conn: conn,
-	}
-
-	return &m
-}
-
-func (m *Monkey) Close() (err error){
-	m.conn.Write([]byte("done"))
-	return m.conn.Close()
-}
-
-func (m *Monkey) send(cmd string) (err error){
-	_, err = m.conn.Write([]byte(cmd))
-/*	if err != nil {
-		return
-	}
-	buf := make([]byte, 2)
-	n, err = m.conn.Read(buf)
-*/
-	return
-}
-
-func (m *Monkey) Tap(loc image.Point) (err error){
-	str := fmt.Sprintf("tap %d %d\n", loc.X, loc.Y)
-	err = m.send(str)
-	return
-}
-
-func (m *Monkey) Text(in string) (err error){
-	str := fmt.Sprintf("type %s\n", in)
-	err = m.send(str)
-	return
-}
-
-func (m *Monkey) Press(in string) (err error){
-	str := fmt.Sprintf("press %s\n", in)
-	err = m.send(str)
-	return
-}
-
-func (m *Monkey) Key(in string, ty string) (err error){
-	str := fmt.Sprintf("key %s %s\n", ty, in)
-	err = m.send(str)
-	return
-}
-
-func (m *Monkey) Touch(loc image.Point, ty string) (err error){
-	str := fmt.Sprintf("touch %s %d %d\n", ty, loc.X, loc.Y)
-	err = m.send(str)
-	return
 }
 

@@ -15,13 +15,19 @@ import (
 	"strconv"
 	"strings"
 
+	"image"
+	"../adbbot"
+
 	"../3rd/websocket"
 )
 
 var localAddr = flag.String("l", ":5800", "")
 var daemonAddr = flag.String("t", "127.0.0.1:6900", "")
 
-var wsComp = flag.Bool("comp", false, "ws compression")
+var wsComp = flag.Bool("wscomp", false, "ws compression")
+var compress = flag.Bool("comp", false, "compress connection")
+
+var reflash = flag.Int("r", 1000, "update screen minimum time (ms)")
 
 var verbosity = flag.Int("v", 3, "verbosity")
 
@@ -163,60 +169,83 @@ func broacast() {
 	}
 }
 
-func pollimg(daemon net.Conn) {
+func pollimg(bot adbbot.Bot) {
 	var err error
 	var buf []byte
 
-	WriteTagStr(daemon, "poll")
-	conn := NewCompStream(daemon, 1)
-//	conn := NewFlateStream(daemon, 1)
+	limit := time.Duration(*reflash) * time.Millisecond
+
 	for {
 		start := time.Now()
-		buf, err = ReadVTagByte(conn)
+		err = bot.TriggerScreencap()
 		if err != nil {
-			Vln(2, "[screen][pool]err", err)
+			Vln(2, "[screen][trigger]err", err)
 			return
 		}
-		Vln(4, "[screen][poll]", len(buf), time.Since(start))
+		Vln(4, "[screen][trigger]", time.Since(start))
+
+		buf, err = bot.PullScreenByte()
+		if err != nil {
+			Vln(2, "[screen][pull]err", err)
+			return
+		}
+		Vln(4, "[screen][pull]", len(buf), time.Since(start))
 
 		select {
 		case <- screen:
 		default:
 		}
 		screen <- buf
+
+		if time.Since(start) < limit {
+			time.Sleep(limit - time.Since(start))
+		}
 	}
 }
 
 var op chan OP
-func pushop(daemon net.Conn) {
-	var err error
+func pushop(bot adbbot.Bot) {
 	op = make(chan OP, 4)
+
+	var evmap = map[int]adbbot.KeyAction{
+		-1: adbbot.KEY_UP,
+		0: adbbot.KEY_MV,
+		1: adbbot.KEY_DOWN,
+	}
+
+	var keymap = map[string]string{
+		"home": "KEYCODE_HOME",
+		"back": "KEYCODE_BACK",
+		"task": "KEYCODE_APP_SWITCH",
+		"power": "KEYCODE_POWER",
+	}
 
 	for {
 		todo := <- op
 
 		switch todo.Type {
 		case 0:
-			err = WriteTagStr(daemon, "Key")
-			if err != nil {
-				Vln(2, "[send][Key]err", err, todo)
-				return
+			keycode, ok := keymap[todo.Op]
+			if !ok {
+				continue
 			}
-			WriteTagStr(daemon, todo.Op)
-			WriteVLen(daemon, int64(todo.Ev))
+
+			ty, ok := evmap[todo.Ev]
+			if !ok {
+				continue
+			}
+			bot.Key(keycode, ty)
 
 		case 1:
-			err = WriteTagStr(daemon, "Touch")
-			if err != nil {
-				Vln(2, "[send][Touch]err", err, todo)
-				return
+			ty, ok := evmap[todo.Ev]
+			if !ok {
+				continue
 			}
-			WriteVLen(daemon, int64(todo.X0))
-			WriteVLen(daemon, int64(todo.Y0))
-			WriteVLen(daemon, int64(todo.Ev))
+			bot.Touch(image.Pt(todo.X0, todo.Y0), ty)
 		}
 	}
 }
+
 func main() {
 	log.SetFlags(log.Ldate|log.Ltime)
 	flag.Parse()
@@ -226,15 +255,19 @@ func main() {
 	Vf(1, "ws EnableCompression = %v\n", *wsComp)
 	Vf(1, "server Listen @ %v\n", *localAddr)
 
-	poll, err := net.Dial("tcp", *daemonAddr)
+	conn, err := net.Dial("tcp", *daemonAddr)
 	if err != nil {
 		Vln(1, "error connct to", *daemonAddr)
 		return
 	}
-	go pollimg(poll)
 
-	conn, err := net.Dial("tcp", *daemonAddr)
-	go pushop(conn)
+	bot, err := adbbot.NewRemoteBot(conn, *compress)
+	if err != nil {
+		Vln(1, "connct to", *daemonAddr, "err:", err)
+		return
+	}
+	go pushop(bot)
+	go pollimg(bot)
 	Vln(1, "connct", *daemonAddr, "ok!")
 
 	go broacast()
@@ -243,21 +276,6 @@ func main() {
 	http.HandleFunc("/", keys)
 	http.ListenAndServe(*localAddr, nil)
 	
-}
-
-func readXY(p1 net.Conn) (x, y int, err error) {
-	var x0, y0 int64
-	x0, err = ReadVLen(p1)
-	if err != nil {
-		Vln(2, "[x]err", err)
-		return
-	}
-	y0, err = ReadVLen(p1)
-	if err != nil {
-		Vln(2, "[y]err", err)
-		return
-	}
-	return int(x0), int(y0), nil
 }
 
 func Vln(level int, v ...interface{}) {
