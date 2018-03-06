@@ -80,6 +80,30 @@ func FindExistReg(b Bot, tmpl *Tmpl, times int, delay int) (x int, y int, val fl
 	return
 }
 
+func FindRegCached(b Bot, tmpl *Tmpl, delay int) (x int, y int, val float64){
+	img := b.GetLastScreencap()
+
+	if !tmpl.Region.Empty() {
+		Vln(5, "crop", tmpl)
+		var reg image.Rectangle
+		reg = img.Bounds().Intersect(tmpl.Region)
+		img = img.(*image.NRGBA).SubImage(reg)
+	}
+
+	Vln(5, "FindP()", tmpl)
+	timeStart()
+	x, y, val = FindP(img, tmpl.Image)
+	timeEnd("FindP()")
+	if x != -1 && y != -1 {
+		Vln(4, "FindExistP()", x, y, val)
+		return
+	}
+
+	Vln(4, "FindExistP()", x, y, val)
+	time.Sleep(time.Millisecond * time.Duration(delay))
+	return
+}
+
 func FindExistP(b Bot, subimg image.Image, times int, delay int) (x int, y int, val float64){
 
 	for i := 0; i < times; i++ {

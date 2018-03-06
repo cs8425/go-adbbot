@@ -131,7 +131,9 @@ func (b *LocalBot) TriggerScreencap() (err error) {
 	if b.scale != 1.0 {
 		screensize := b.ScreenBounds.Size()
 		newX := int(float64(screensize.X) * b.scale)
-		img = Resize(img, newX, 0, Lanczos)
+//		img = Resize(img, newX, 0, Lanczos)
+//		img = Resize(img, newX, 0, Box)
+		img = Resize(img, newX, 0, NearestNeighbor)
 	}
 
 	if err == nil {
@@ -228,19 +230,5 @@ func (b *LocalBot) ScriptScreen(x0, y0, dx, dy int) () {
 	b.TargetScreen = &image.Rectangle{image.Pt(x0, y0), image.Pt(dx, dy)}
 	Vln(4, "set Script Screen", x0, y0, dx, dy, b.TargetScreen)
 }
-
-/*func (b *LocalBot) Remap(loc image.Point) (image.Point){
-	x := loc.X
-	y := loc.Y
-	Vln(4, "Remap", b.TargetScreen, b.ScreenBounds)
-	if b.TargetScreen != nil && !b.ScreenBounds.Empty() {
-		scriptsize := b.TargetScreen.Size()
-		screensize := b.ScreenBounds.Size()
-		x = x * screensize.X / scriptsize.X
-		y = y * screensize.X / scriptsize.X
-		Vln(4, "Remap to", x, y)
-	}
-	return image.Pt(x, y)
-}*/
 
 

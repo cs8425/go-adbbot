@@ -3,9 +3,8 @@ package adbbot
 import (
 	"net"
 	"time"
-//	"sync"
+	"sync"
 
-//	"io"
 	"bytes"
 	"image"
 	"image/png"
@@ -22,9 +21,9 @@ type Daemon struct {
 	captime     time.Time // lock?
 	triggerCh   chan struct{}
 	screenBuf   bytes.Buffer
-	bufReady    chan struct{}
 
-//	newclients  chan io.ReadWriteCloser
+	screenReq   map[(chan struct{})](chan struct{})
+	screenReqMx sync.Mutex
 }
 
 func NewDaemon(ln net.Listener, bot Bot, comp bool) (*Daemon, error) {
@@ -32,8 +31,10 @@ func NewDaemon(ln net.Listener, bot Bot, comp bool) (*Daemon, error) {
 		ln: ln,
 		bot: bot,
 		compress: comp,
+
 		triggerCh: make(chan struct{}, 1),
-		bufReady: make(chan struct{}),
+		screenReq: make(map[(chan struct{})](chan struct{})),
+
 		Reflash: 500 * time.Millisecond,
 	}
 
@@ -89,11 +90,16 @@ func (d *Daemon) screenCoder() {
 //			jpeg.Encode(&d.screenBuf, d.bot.GetLastScreencap(), option)
 			Vln(4, "[screen][encode]", time.Since(d.captime))
 
-			select {
-			case <- d.bufReady:
-			default:
-				close(d.bufReady)
+			d.screenReqMx.Lock()
+			for _, req := range d.screenReq {
+				select {
+				case <- req:
+				default:
+					req <- struct{}{}
+				}
 			}
+			d.screenReq = make(map[(chan struct{})](chan struct{}))
+			d.screenReqMx.Unlock()
 		}
 	}
 
@@ -123,7 +129,6 @@ func (d *Daemon) handleConn(p1 net.Conn) {
 	screenCh := make(chan struct{}, 1)
 	defer close(screenCh)
 	go func (p1 net.Conn, ch chan struct{}) {
-		<- d.bufReady
 		for {
 			_, ok := <- ch
 			if !ok {
@@ -180,7 +185,13 @@ func (d *Daemon) handleConn(p1 net.Conn) {
 			WriteVLen(p1, int64(d.bot.ScreenBounds.Dy()))*/
 		case "GetScreen":
 			//WriteVTagByte(p1, buf.Bytes())
-			screenCh <- struct{}{}
+//			screenCh <- struct{}{}
+			d.screenReqMx.Lock()
+			_, ok := d.screenReq[screenCh]
+			if !ok {
+				d.screenReq[screenCh] = screenCh
+			}
+			d.screenReqMx.Unlock()
 
 /*		case "poll":
 			Vln(3, "[todo][poll]", p1)

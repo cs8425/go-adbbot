@@ -59,6 +59,10 @@ func main() {
 //	go screencap(bot)
 
 	daemon, err := adbbot.NewDaemon(ln, bot, *compress)
+	if err != nil {
+		Vln(1, "[Daemon]Start Error:", err)
+		return
+	}
 	defer daemon.Close()
 	daemon.Listen()
 }
