@@ -4,6 +4,7 @@ import (
 	"image"
 //	"image/color"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -49,7 +50,7 @@ func FindExistReg(b Bot, tmpl *Tmpl, times int, delay int) (x int, y int, val fl
 		}
 
 		Vln(5, "FindP()", i)
-		timeStart()
+//		timeStart()
 		/*if b.TargetScreen != nil {
 			scriptsize := b.TargetScreen.Size()
 			screensize := b.ScreenBounds.Size()
@@ -68,7 +69,7 @@ func FindExistReg(b Bot, tmpl *Tmpl, times int, delay int) (x int, y int, val fl
 			x, y, val = FindP(img, tmpl.Image)
 		}*/
 		x, y, val = FindP(img, tmpl.Image)
-		timeEnd("FindP()")
+//		timeEnd("FindP()")
 		if x != -1 && y != -1 {
 			Vln(4, "FindExistP()", x, y, val)
 			return
@@ -91,9 +92,9 @@ func FindRegCached(b Bot, tmpl *Tmpl, delay int) (x int, y int, val float64){
 	}
 
 	Vln(5, "FindP()", tmpl)
-	timeStart()
+//	timeStart()
 	x, y, val = FindP(img, tmpl.Image)
-	timeEnd("FindP()")
+//	timeEnd("FindP()")
 	if x != -1 && y != -1 {
 		Vln(4, "FindExistP()", x, y, val)
 		return
@@ -114,9 +115,9 @@ func FindExistP(b Bot, subimg image.Image, times int, delay int) (x int, y int, 
 		}
 
 		Vln(5, "FindP()", i)
-		timeStart()
+//		timeStart()
 		x, y, val = FindP(img, subimg)
-		timeEnd("FindP()")
+//		timeEnd("FindP()")
 		if x != -1 && y != -1 {
 			Vln(4, "FindExistP()", x, y, val)
 			return
@@ -129,6 +130,7 @@ func FindExistP(b Bot, subimg image.Image, times int, delay int) (x int, y int, 
 }
 
 func FindP(img image.Image, subimg image.Image) (x int, y int, val float64) {
+	timeStart()
 
 	x = -1
 	y = -1
@@ -154,7 +156,7 @@ func FindP(img image.Image, subimg image.Image) (x int, y int, val float64) {
 				for i := partStart; i < partEnd; i++ {
 					for j := startX; j < endX; j++ {
 
-						tmp := CmpAt(nrgba, snrgba, j, i, min) //CmpAt(nrgba, snrgba, j, i, min)
+						tmp := CmpAt(nrgba, snrgba, j, i, min)
 						mutex.Lock()
 						if tmp < min {
 							min = tmp
@@ -168,8 +170,86 @@ func FindP(img image.Image, subimg image.Image) (x int, y int, val float64) {
 			})
 		}
 	}
-
 	val = (1 - (float64(min) / float64(255 * 255 * 3 * subimg.Bounds().Dy() * subimg.Bounds().Dx())))
+
+	timeEnd("FindP()")
+
+	if x == -1 && y == -1 {
+		return -1, -1, 0
+	} else {
+		return x, y, val
+	}
+}
+
+func FindP2(img image.Image, subimg image.Image) (x int, y int, val float64) {
+	timeStart()
+
+	x = -1
+	y = -1
+
+	startX := img.Bounds().Min.X
+	endX := img.Bounds().Max.X - subimg.Bounds().Dx()
+
+	startY := img.Bounds().Min.Y
+	endY := img.Bounds().Max.Y - subimg.Bounds().Dy()
+
+	var min int64 = int64(subimg.Bounds().Dx() * subimg.Bounds().Dy() * 255 * 255 * 3) / 32
+//	var min int64 = 0x7fffffffffffffff
+
+	Vln(5, "Find @ = ", startX, endX, startY, endY)
+
+	if nrgba, ok := img.(*image.NRGBA); ok {
+		if snrgba, ok := subimg.(*image.NRGBA); ok {
+
+			type cmpRet struct {
+				X int
+				Y int
+				V int64
+			}
+
+			reduceCh := make(chan cmpRet, 8)
+			go func() {
+				for {
+					ret, ok := <- reduceCh
+					if !ok {
+						return
+					}
+
+					if ret.V < min {
+						x = ret.X
+						y = ret.Y
+
+						//min = ret.V
+						atomic.StoreInt64(&min, ret.V)
+					}
+				}
+			}()
+
+			wg := parallelSpawn(endY - startY, 1, func(partStart, partEnd int) {
+//				Vln(2, "partStart, partEnd = ", partStart, partEnd)
+				partStart += startY
+				partEnd += startY
+				for i := partStart; i < partEnd; i++ {
+					for j := startX; j < endX; j++ {
+
+						localMin := atomic.LoadInt64(&min)
+						tmp := CmpAt(nrgba, snrgba, j, i, localMin)
+						if tmp < localMin {
+							min = tmp
+							x = j
+							y = i
+						}
+					}
+				}
+			})
+			wg.Wait()
+			close(reduceCh)
+		}
+	}
+	val = (1 - (float64(min) / float64(255 * 255 * 3 * subimg.Bounds().Dy() * subimg.Bounds().Dx())))
+
+	timeEnd("FindP()")
+
 	if x == -1 && y == -1 {
 		return -1, -1, 0
 	} else {
@@ -178,6 +258,7 @@ func FindP(img image.Image, subimg image.Image) (x int, y int, val float64) {
 }
 
 func Find(img image.Image, subimg image.Image) (x int, y int, val float64) {
+	timeStart()
 
 	x = -1
 	y = -1
@@ -213,6 +294,9 @@ func Find(img image.Image, subimg image.Image) (x int, y int, val float64) {
 	}
 
 	val = (1 - (float64(min) / float64(255 * 255 * 3 * subimg.Bounds().Dy() * subimg.Bounds().Dx())))
+
+	timeEnd("Find()")
+
 	if x == -1 && y == -1 {
 		return -1, -1, 0
 	} else {

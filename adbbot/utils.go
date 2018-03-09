@@ -421,6 +421,13 @@ func Clone(img image.Image) *image.NRGBA {
 // if GOMAXPROCS = 1: no goroutines used
 // if GOMAXPROCS > 1: spawn N=GOMAXPROCS workers in separate goroutines
 func parallel(dataSize int, minSize int, fn func(partStart, partEnd int)) {
+	wg := parallelSpawn(dataSize, minSize, fn)
+	if wg != nil {
+		wg.Wait()
+	}
+}
+
+func parallelSpawn(dataSize int, minSize int, fn func(partStart, partEnd int)) (*sync.WaitGroup) {
 	numGoroutines := 1
 	partSize := dataSize
 
@@ -456,9 +463,9 @@ func parallel(dataSize int, minSize int, fn func(partStart, partEnd int)) {
 				}
 			}()
 		}
-
-		wg.Wait()
+		return &wg
 	}
+	return nil
 }
 
 
