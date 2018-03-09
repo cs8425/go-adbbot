@@ -48,9 +48,6 @@ func main() {
 		}
 
 		x, y, val = ab.FindP(input, tmpl.Image)
-		x, y, val = ab.FindP2(input, tmpl.Image)
-		x, y, val = ab.FindP(input, tmpl.Image)
-		x, y, val = ab.FindP2(input, tmpl.Image)
 		if x == -1 && y == -1 {
 			Vln(2, "template not found", x, y, val)
 		} else {

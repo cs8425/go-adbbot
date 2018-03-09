@@ -2,18 +2,9 @@ package adbbot
 
 import (
 	"image"
-//	"image/color"
-	"sync"
 	"sync/atomic"
 	"time"
 )
-
-
-type Match struct {
-	Pt image.Point
-	Val float64
-	ValInt int64
-}
 
 func abs(a, b uint8) (int64){
 	c := int64(a) - int64(b)
@@ -148,55 +139,6 @@ func FindP(img image.Image, subimg image.Image) (x int, y int, val float64) {
 
 	if nrgba, ok := img.(*image.NRGBA); ok {
 		if snrgba, ok := subimg.(*image.NRGBA); ok {
-			var mutex = &sync.Mutex{}
-			parallel(startY, endY, func(ys <-chan int) {
-				for i := range ys {
-					for j := startX; j < endX; j++ {
-
-						tmp := CmpAt(nrgba, snrgba, j, i, min)
-						mutex.Lock()
-						if tmp < min {
-							min = tmp
-							x = j
-							y = i
-						}
-						mutex.Unlock()
-					}
-				}
-//				Vln(2, "min, x, y = ", min, x, y)
-			})
-		}
-	}
-	val = (1 - (float64(min) / float64(255 * 255 * 3 * subimg.Bounds().Dy() * subimg.Bounds().Dx())))
-
-	timeEnd("FindP()")
-
-	if x == -1 && y == -1 {
-		return -1, -1, 0
-	} else {
-		return x, y, val
-	}
-}
-
-func FindP2(img image.Image, subimg image.Image) (x int, y int, val float64) {
-	timeStart()
-
-	x = -1
-	y = -1
-
-	startX := img.Bounds().Min.X
-	endX := img.Bounds().Max.X - subimg.Bounds().Dx()
-
-	startY := img.Bounds().Min.Y
-	endY := img.Bounds().Max.Y - subimg.Bounds().Dy()
-
-	var min int64 = int64(subimg.Bounds().Dx() * subimg.Bounds().Dy() * 255 * 255 * 3) / 32
-//	var min int64 = 0x7fffffffffffffff
-
-	Vln(5, "Find @ = ", startX, endX, startY, endY)
-
-	if nrgba, ok := img.(*image.NRGBA); ok {
-		if snrgba, ok := subimg.(*image.NRGBA); ok {
 
 			type cmpRet struct {
 				X int
@@ -300,7 +242,7 @@ func Find(img image.Image, subimg image.Image) (x int, y int, val float64) {
 
 func CmpAt(img *image.NRGBA, subimg *image.NRGBA, offX int, offY int, limit int64) (int64) {
 
-	if limit == 0 {
+	if limit <= 0 {
 		return 0
 	}
 
@@ -309,15 +251,16 @@ func CmpAt(img *image.NRGBA, subimg *image.NRGBA, offX int, offY int, limit int6
 	dX := subimg.Bounds().Dx()
 	if offX + dX > img.Bounds().Max.X {
 		dX = img.Bounds().Max.X
-		return 0
+		return limit
 	}
 
 	dY := subimg.Bounds().Dy()
 	if offY + dY > img.Bounds().Max.Y {
 		dY = img.Bounds().Max.Y
-		return 0
+		return limit
 	}
 
+	// BCE
 	bound1 := img.PixOffset(offX, offY)
 	bound2 := img.PixOffset(dX + offX, dY + offY)
 	_ = img.Pix[bound1:bound2]
@@ -326,6 +269,7 @@ func CmpAt(img *image.NRGBA, subimg *image.NRGBA, offX int, offY int, limit int6
 	bound2 = subimg.PixOffset(dX-1, dY-1)
 	_ = subimg.Pix[bound1:bound2]
 
+	// start
 	for i := 0; i < dY; i++ {
 		for j := 0; j < dX; j++ {
 
