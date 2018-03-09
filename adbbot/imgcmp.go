@@ -149,11 +149,8 @@ func FindP(img image.Image, subimg image.Image) (x int, y int, val float64) {
 	if nrgba, ok := img.(*image.NRGBA); ok {
 		if snrgba, ok := subimg.(*image.NRGBA); ok {
 			var mutex = &sync.Mutex{}
-			parallel(endY - startY, 1, func(partStart, partEnd int) {
-//				Vln(2, "partStart, partEnd = ", partStart, partEnd)
-				partStart += startY
-				partEnd += startY
-				for i := partStart; i < partEnd; i++ {
+			parallel(startY, endY, func(ys <-chan int) {
+				for i := range ys {
 					for j := startX; j < endX; j++ {
 
 						tmp := CmpAt(nrgba, snrgba, j, i, min)
@@ -218,29 +215,26 @@ func FindP2(img image.Image, subimg image.Image) (x int, y int, val float64) {
 					if ret.V < min {
 						x = ret.X
 						y = ret.Y
-
-						//min = ret.V
 						atomic.StoreInt64(&min, ret.V)
 					}
 				}
 			}()
 
-			wg := parallelSpawn(endY - startY, 1, func(partStart, partEnd int) {
-//				Vln(2, "partStart, partEnd = ", partStart, partEnd)
-				partStart += startY
-				partEnd += startY
-				for i := partStart; i < partEnd; i++ {
+			wg := parallelSpawn(startY, endY, func(ys <-chan int) {
+				for y := range ys {
 					for j := startX; j < endX; j++ {
-
 						localMin := atomic.LoadInt64(&min)
-						tmp := CmpAt(nrgba, snrgba, j, i, localMin)
+						tmp := CmpAt(nrgba, snrgba, j, y, localMin)
 						if tmp < localMin {
-							min = tmp
-							x = j
-							y = i
+							reduceCh <- cmpRet {
+								X: j,
+								Y: y,
+								V: tmp,
+							}
 						}
 					}
 				}
+//				Vln(2, "min, x, y = ", min, x, y)
 			})
 			wg.Wait()
 			close(reduceCh)
@@ -248,7 +242,7 @@ func FindP2(img image.Image, subimg image.Image) (x int, y int, val float64) {
 	}
 	val = (1 - (float64(min) / float64(255 * 255 * 3 * subimg.Bounds().Dy() * subimg.Bounds().Dx())))
 
-	timeEnd("FindP()")
+	timeEnd("FindP2()")
 
 	if x == -1 && y == -1 {
 		return -1, -1, 0
@@ -323,6 +317,14 @@ func CmpAt(img *image.NRGBA, subimg *image.NRGBA, offX int, offY int, limit int6
 		dY = img.Bounds().Max.Y
 		return 0
 	}
+
+	bound1 := img.PixOffset(offX, offY)
+	bound2 := img.PixOffset(dX + offX, dY + offY)
+	_ = img.Pix[bound1:bound2]
+
+	bound1 = subimg.PixOffset(0, 0)
+	bound2 = subimg.PixOffset(dX-1, dY-1)
+	_ = subimg.Pix[bound1:bound2]
 
 	for i := 0; i < dY; i++ {
 		for j := 0; j < dX; j++ {

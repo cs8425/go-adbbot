@@ -3,7 +3,6 @@ package adbbot
 import (
 	"errors"
 	"image"
-	"image/color"
 	"image/gif"
 	"image/jpeg"
 	"image/png"
@@ -13,7 +12,6 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -82,7 +80,7 @@ func RectAbs(x, y, x2, y2 int) (image.Rectangle){
 /*
 The MIT License (MIT)
 
-Copyright (c) 2012-2014 Grigory Dryapak
+Copyright (c) 2012-2018 Grigory Dryapak
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -197,229 +195,73 @@ func Encode(w io.Writer, img image.Image, format Format) error {
 
 // Clone returns a copy of the given image.
 func Clone(img image.Image) *image.NRGBA {
-	srcBounds := img.Bounds()
-	srcMinX := srcBounds.Min.X
-	srcMinY := srcBounds.Min.Y
-
-	dstBounds := srcBounds.Sub(srcBounds.Min)
-	dstW := dstBounds.Dx()
-	dstH := dstBounds.Dy()
-	dst := image.NewNRGBA(dstBounds)
-
-	switch src := img.(type) {
-
-	case *image.NRGBA:
-		rowSize := srcBounds.Dx() * 4
-		parallel(dstH, 1, func(partStart, partEnd int) {
-			for dstY := partStart; dstY < partEnd; dstY++ {
-				di := dst.PixOffset(0, dstY)
-				si := src.PixOffset(srcMinX, srcMinY+dstY)
-				copy(dst.Pix[di:di+rowSize], src.Pix[si:si+rowSize])
-			}
-		})
-
-	case *image.NRGBA64:
-		parallel(dstH, 1, func(partStart, partEnd int) {
-			for dstY := partStart; dstY < partEnd; dstY++ {
-				di := dst.PixOffset(0, dstY)
-				si := src.PixOffset(srcMinX, srcMinY+dstY)
-				for dstX := 0; dstX < dstW; dstX++ {
-
-					dst.Pix[di+0] = src.Pix[si+0]
-					dst.Pix[di+1] = src.Pix[si+2]
-					dst.Pix[di+2] = src.Pix[si+4]
-					dst.Pix[di+3] = src.Pix[si+6]
-
-					di += 4
-					si += 8
-
-				}
-			}
-		})
-
-	case *image.RGBA:
-		parallel(dstH, 1, func(partStart, partEnd int) {
-			for dstY := partStart; dstY < partEnd; dstY++ {
-				di := dst.PixOffset(0, dstY)
-				si := src.PixOffset(srcMinX, srcMinY+dstY)
-				for dstX := 0; dstX < dstW; dstX++ {
-
-					a := src.Pix[si+3]
-					dst.Pix[di+3] = a
-					switch a {
-					case 0:
-						dst.Pix[di+0] = 0
-						dst.Pix[di+1] = 0
-						dst.Pix[di+2] = 0
-					case 0xff:
-						dst.Pix[di+0] = src.Pix[si+0]
-						dst.Pix[di+1] = src.Pix[si+1]
-						dst.Pix[di+2] = src.Pix[si+2]
-					default:
-						var tmp uint16
-						tmp = uint16(src.Pix[si+0]) * 0xff / uint16(a)
-						dst.Pix[di+0] = uint8(tmp)
-						tmp = uint16(src.Pix[si+1]) * 0xff / uint16(a)
-						dst.Pix[di+1] = uint8(tmp)
-						tmp = uint16(src.Pix[si+2]) * 0xff / uint16(a)
-						dst.Pix[di+2] = uint8(tmp)
-					}
-
-					di += 4
-					si += 4
-
-				}
-			}
-		})
-
-	case *image.RGBA64:
-		parallel(dstH, 1, func(partStart, partEnd int) {
-			for dstY := partStart; dstY < partEnd; dstY++ {
-				di := dst.PixOffset(0, dstY)
-				si := src.PixOffset(srcMinX, srcMinY+dstY)
-				for dstX := 0; dstX < dstW; dstX++ {
-
-					a := src.Pix[si+6]
-					dst.Pix[di+3] = a
-					switch a {
-					case 0:
-						dst.Pix[di+0] = 0
-						dst.Pix[di+1] = 0
-						dst.Pix[di+2] = 0
-					case 0xff:
-						dst.Pix[di+0] = src.Pix[si+0]
-						dst.Pix[di+1] = src.Pix[si+2]
-						dst.Pix[di+2] = src.Pix[si+4]
-					default:
-						var tmp uint16
-						tmp = uint16(src.Pix[si+0]) * 0xff / uint16(a)
-						dst.Pix[di+0] = uint8(tmp)
-						tmp = uint16(src.Pix[si+2]) * 0xff / uint16(a)
-						dst.Pix[di+1] = uint8(tmp)
-						tmp = uint16(src.Pix[si+4]) * 0xff / uint16(a)
-						dst.Pix[di+2] = uint8(tmp)
-					}
-
-					di += 4
-					si += 8
-
-				}
-			}
-		})
-
-	case *image.Gray:
-		parallel(dstH, 1, func(partStart, partEnd int) {
-			for dstY := partStart; dstY < partEnd; dstY++ {
-				di := dst.PixOffset(0, dstY)
-				si := src.PixOffset(srcMinX, srcMinY+dstY)
-				for dstX := 0; dstX < dstW; dstX++ {
-
-					c := src.Pix[si]
-					dst.Pix[di+0] = c
-					dst.Pix[di+1] = c
-					dst.Pix[di+2] = c
-					dst.Pix[di+3] = 0xff
-
-					di += 4
-					si += 1
-
-				}
-			}
-		})
-
-	case *image.Gray16:
-		parallel(dstH, 1, func(partStart, partEnd int) {
-			for dstY := partStart; dstY < partEnd; dstY++ {
-				di := dst.PixOffset(0, dstY)
-				si := src.PixOffset(srcMinX, srcMinY+dstY)
-				for dstX := 0; dstX < dstW; dstX++ {
-
-					c := src.Pix[si]
-					dst.Pix[di+0] = c
-					dst.Pix[di+1] = c
-					dst.Pix[di+2] = c
-					dst.Pix[di+3] = 0xff
-
-					di += 4
-					si += 2
-
-				}
-			}
-		})
-
-	case *image.YCbCr:
-		parallel(dstH, 1, func(partStart, partEnd int) {
-			for dstY := partStart; dstY < partEnd; dstY++ {
-				di := dst.PixOffset(0, dstY)
-				for dstX := 0; dstX < dstW; dstX++ {
-
-					srcX := srcMinX + dstX
-					srcY := srcMinY + dstY
-					siy := src.YOffset(srcX, srcY)
-					sic := src.COffset(srcX, srcY)
-					r, g, b := color.YCbCrToRGB(src.Y[siy], src.Cb[sic], src.Cr[sic])
-					dst.Pix[di+0] = r
-					dst.Pix[di+1] = g
-					dst.Pix[di+2] = b
-					dst.Pix[di+3] = 0xff
-
-					di += 4
-
-				}
-			}
-		})
-
-	case *image.Paletted:
-		plen := len(src.Palette)
-		pnew := make([]color.NRGBA, plen)
-		for i := 0; i < plen; i++ {
-			pnew[i] = color.NRGBAModel.Convert(src.Palette[i]).(color.NRGBA)
+	src := newScanner(img)
+	dst := image.NewNRGBA(image.Rect(0, 0, src.w, src.h))
+	size := src.w * 4
+	parallel(0, src.h, func(ys <-chan int) {
+		for y := range ys {
+			i := y * dst.Stride
+			src.scan(0, y, src.w, y+1, dst.Pix[i:i+size])
 		}
-
-		parallel(dstH, 1, func(partStart, partEnd int) {
-			for dstY := partStart; dstY < partEnd; dstY++ {
-				di := dst.PixOffset(0, dstY)
-				si := src.PixOffset(srcMinX, srcMinY+dstY)
-				for dstX := 0; dstX < dstW; dstX++ {
-
-					c := pnew[src.Pix[si]]
-					dst.Pix[di+0] = c.R
-					dst.Pix[di+1] = c.G
-					dst.Pix[di+2] = c.B
-					dst.Pix[di+3] = c.A
-
-					di += 4
-					si += 1
-
-				}
-			}
-		})
-
-	default:
-		parallel(dstH, 1, func(partStart, partEnd int) {
-			for dstY := partStart; dstY < partEnd; dstY++ {
-				di := dst.PixOffset(0, dstY)
-				for dstX := 0; dstX < dstW; dstX++ {
-
-					c := color.NRGBAModel.Convert(img.At(srcMinX+dstX, srcMinY+dstY)).(color.NRGBA)
-					dst.Pix[di+0] = c.R
-					dst.Pix[di+1] = c.G
-					dst.Pix[di+2] = c.B
-					dst.Pix[di+3] = c.A
-
-					di += 4
-
-				}
-			}
-		})
-
-	}
-
+	})
 	return dst
 }
 
-// if GOMAXPROCS = 1: no goroutines used
-// if GOMAXPROCS > 1: spawn N=GOMAXPROCS workers in separate goroutines
+func toNRGBA(img image.Image) *image.NRGBA {
+	if img, ok := img.(*image.NRGBA); ok {
+		return &image.NRGBA{
+			Pix:    img.Pix,
+			Stride: img.Stride,
+			Rect:   img.Rect.Sub(img.Rect.Min),
+		}
+	}
+	return Clone(img)
+}
+
+// parallel processes the data in separate goroutines.
+func parallel(start, stop int, fn func(<-chan int)) {
+	wg := parallelSpawn(start, stop, fn)
+	if wg != nil {
+		wg.Wait()
+	}
+}
+
+func parallelSpawn(start, stop int, fn func(<-chan int)) (*sync.WaitGroup) {
+	count := stop - start
+	if count < 1 {
+		return nil
+	}
+
+	procs := runtime.GOMAXPROCS(0)
+	if procs > count {
+		procs = count
+	}
+
+
+	c := make(chan int, procs)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		for i := start; i < stop; i++ {
+			c <- i
+		}
+		close(c)
+		wg.Done()
+	}()
+
+	for i := 0; i < procs; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			fn(c)
+		}()
+	}
+	return &wg
+}
+
+
+/*
 func parallel(dataSize int, minSize int, fn func(partStart, partEnd int)) {
 	wg := parallelSpawn(dataSize, minSize, fn)
 	if wg != nil {
@@ -427,6 +269,8 @@ func parallel(dataSize int, minSize int, fn func(partStart, partEnd int)) {
 	}
 }
 
+// if GOMAXPROCS = 1: no goroutines used
+// if GOMAXPROCS > 1: spawn N=GOMAXPROCS workers in separate goroutines
 func parallelSpawn(dataSize int, minSize int, fn func(partStart, partEnd int)) (*sync.WaitGroup) {
 	numGoroutines := 1
 	partSize := dataSize
@@ -463,9 +307,9 @@ func parallelSpawn(dataSize int, minSize int, fn func(partStart, partEnd int)) (
 				}
 			}()
 		}
+
 		return &wg
 	}
 	return nil
-}
-
+}*/
 

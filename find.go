@@ -39,27 +39,25 @@ func main() {
 	}
 
 	if *IN != "" {
+		var x, y int
+		var val float64
 
 		input, err := ab.OpenImage(*IN)
 		if err != nil {
 			Vln(2, "load input image err", err)
 		}
 
-		x, y, val := ab.Find(input, tmpl.Image)
-		if x == -1 && y == -1 {
-			Vln(2, "template not found", x, y, val)
-		} else {
-			Vln(2, "template found at", x, y, val)
-		}
-
 		x, y, val = ab.FindP(input, tmpl.Image)
+		x, y, val = ab.FindP2(input, tmpl.Image)
+		x, y, val = ab.FindP(input, tmpl.Image)
+		x, y, val = ab.FindP2(input, tmpl.Image)
 		if x == -1 && y == -1 {
 			Vln(2, "template not found", x, y, val)
 		} else {
 			Vln(2, "template found at", x, y, val)
 		}
 
-		x, y, val = ab.FindP2(input, tmpl.Image)
+		x, y, val = ab.Find(input, tmpl.Image)
 		if x == -1 && y == -1 {
 			Vln(2, "template not found", x, y, val)
 		} else {
