@@ -81,7 +81,7 @@ func (d *Daemon) screenCoder() {
 		if !ok {
 			return
 		}
-		if time.Since(d.captime) >= d.Reflash { // keep away from impossible screencap frequency
+//		if time.Since(d.captime) >= d.Reflash { // keep away from impossible screencap frequency
 			d.captime = time.Now()
 			d.bot.TriggerScreencap()
 			Vln(4, "[screen][trigger]", time.Since(d.captime))
@@ -100,7 +100,7 @@ func (d *Daemon) screenCoder() {
 			}
 			d.screenReq = make(map[(chan struct{})](chan struct{}))
 			d.screenReqMx.Unlock()
-		}
+//		}
 	}
 
 }
