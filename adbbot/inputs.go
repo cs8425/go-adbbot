@@ -131,11 +131,41 @@ func (m *Monkey) Click(loc image.Point) (err error) {
 	return m.Touch(loc, KEY_UP)*/
 }
 
-func (m *Monkey) SwipeT(p0,p1 image.Point, time int) (err error) {
-//	_, err = i.bot.Shell("input swipe " + strconv.Itoa(p0.X) + " " + strconv.Itoa(p0.Y) + " " + strconv.Itoa(p1.X) + " " + strconv.Itoa(p1.Y) + " " + strconv.Itoa(time))
-	return ErrNotImpl
+// blocking
+func (m *Monkey) SwipeT(p0,p1 image.Point, dtime int) (err error) {
+	if dtime <= 0 {
+		dtime = 300
+	}
+	start := time.Now()
+	dur := time.Duration(dtime) * time.Millisecond
+
+	err = m.Touch(p0, KEY_DOWN)
+	if err != nil {
+		return
+	}
+
+	pt := image.Pt(0, 0)
+	pd := image.Pt(p1.X - p0.X, p1.Y - p0.Y)
+	esp := time.Since(start)
+	for esp < dur {
+		alpha := float64(esp) / float64(dur)
+		pt.X = p0.X + int(float64(pd.X) * alpha)
+		pt.Y = p0.Y + int(float64(pd.Y) * alpha)
+
+		err = m.Touch(pt, KEY_MV)
+		if err != nil {
+			return
+		}
+		time.Sleep(1 * time.Millisecond)
+
+		esp = time.Since(start)
+	}
+
+	err = m.Touch(p1, KEY_UP)
+	return
 }
 
+// blocking
 func (m *Monkey) Keyevent(in string) (err error) {
 	err = m.Key(in, KEY_DOWN)
 	if err != nil {
@@ -186,7 +216,6 @@ func (i *CmdInput) SwipeT(p0,p1 image.Point, time int) (err error) {
 	p0, p1 = i.bot.Remap(p0), i.bot.Remap(p1)
 	str := fmt.Sprintf("input swipe %d %d %d %d %d", p0.X, p0.Y, p1.X, p1.Y, time)
 	_, err = i.bot.Shell(str)
-//	_, err = i.bot.Shell("input swipe " + strconv.Itoa(p0.X) + " " + strconv.Itoa(p0.Y) + " " + strconv.Itoa(p1.X) + " " + strconv.Itoa(p1.Y) + " " + strconv.Itoa(time))
 	return
 }
 
