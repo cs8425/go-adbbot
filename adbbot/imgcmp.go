@@ -137,10 +137,6 @@ func FindP(img image.Image, subimg image.Image) (x int, y int, val float64) {
 
 	Vln(5, "Find @ = ", startX, endX, startY, endY)
 
-	if startY == endY {
-		return -1, -1, 0
-	}
-
 	if nrgba, ok := img.(*image.NRGBA); ok {
 		if snrgba, ok := subimg.(*image.NRGBA); ok {
 

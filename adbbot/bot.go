@@ -26,9 +26,9 @@ type Bot interface {
 	ShellPipe(p1 io.ReadWriteCloser) (error)
 
 	TriggerScreencap()   (err error)
-	GetLastScreencap()   (image.Image)
+	GetLastScreencap()   (image.Image)                // cached image
 	Screencap()          (img image.Image, err error)
-	PullScreenByte()     ([]byte, error)
+	PullScreenByte()     ([]byte, error)              // raw byte (png or RGBA), may not cached
 
 	SaveScreen(imagefile string) (err error)
 

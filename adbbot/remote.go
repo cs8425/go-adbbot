@@ -144,6 +144,17 @@ func (b *RemoteBot) PullScreenByte() ([]byte, error) {
 		return nil, ErrTriggerFirst
 	}
 
+	// decode
+	r := bytes.NewReader(pngByte)
+	img, err := Decode(r)
+	if err != nil {
+		return nil, err
+	}
+
+	// save Screen info
+	b.ScreenBounds = img.Bounds()
+	b.lastScreencap = img
+
 	return pngByte, nil
 }
 
@@ -155,21 +166,10 @@ func (b *RemoteBot) Screencap() (img image.Image, err error) {
 	}
 
 	// pull
-	pngByte, err := b.PullScreenByte()
+	_, err = b.PullScreenByte()
 	if err != nil {
 		return nil, err
 	}
-
-	// decode
-	r := bytes.NewReader(pngByte)
-	img, err = Decode(r)
-	if err != nil {
-		return
-	}
-
-	// save Screen info
-	b.ScreenBounds = img.Bounds()
-	b.lastScreencap = img
 
 	return b.lastScreencap, err
 }

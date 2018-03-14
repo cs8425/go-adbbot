@@ -227,9 +227,11 @@ func parallel(start, stop int, fn func(<-chan int)) {
 }
 
 func parallelSpawn(start, stop int, fn func(<-chan int)) (*sync.WaitGroup) {
+	var wg sync.WaitGroup
+
 	count := stop - start
 	if count < 1 {
-		return nil
+		return &wg
 	}
 
 	procs := runtime.GOMAXPROCS(0)
@@ -239,8 +241,6 @@ func parallelSpawn(start, stop int, fn func(<-chan int)) (*sync.WaitGroup) {
 
 
 	c := make(chan int, procs)
-
-	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		for i := start; i < stop; i++ {
