@@ -97,7 +97,7 @@ func (m *Monkey) Tap(loc image.Point) (err error) {
 }
 
 func (m *Monkey) Text(in string) (err error) {
-	str := fmt.Sprintf("type %s\n", in)
+	str := fmt.Sprintf("type \"%s\"\n", in)
 	err = m.send(str)
 	return
 }
@@ -228,7 +228,8 @@ func (i *CmdInput) Key(in string, ty KeyAction) (err error) {
 }
 
 func (i *CmdInput) Text(in string) (err error) {
-	_, err = i.bot.Shell("input text " + in)
+	str := fmt.Sprintf("input text \"%s\"", in)
+	_, err = i.bot.Shell(str)
 	return
 }
 

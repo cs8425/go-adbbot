@@ -3,6 +3,7 @@ package adbbot
 import (
 	"encoding/binary"
 	"image"
+	"io"
 	"io/ioutil"
 	"os/exec"
 )
@@ -88,6 +89,25 @@ func (b *LocalBot) Shell(parts string) ([]byte, error) {
 	} else {
 		return b.Adb("shell " + parts)
 	}
+}
+
+func (b *LocalBot) ShellPipe(p1 io.ReadWriteCloser) (error) {
+	var cmdstr string
+	if b.IsOnDevice {
+		cmdstr = "sh"
+	} else {
+		cmdstr = b.Exec + b.devstr + "shell"
+	}
+
+	cmd := exec.Command(cmdstr)
+	cmd.Stdout = p1
+	cmd.Stderr = p1
+	cmd.Stdin = p1
+	err := cmd.Run()
+	if err != nil {
+		p1.Write([]byte(err.Error()))
+	}
+	return err
 }
 
 func (b *LocalBot) Pipe(parts string) ([]byte, error) {

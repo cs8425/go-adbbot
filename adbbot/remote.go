@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"image"
 	"net"
-//	"io"
+	"io"
 	"time"
 )
 
@@ -104,7 +104,7 @@ func (b *RemoteBot) pushworker() {
 }
 
 
-func (b *RemoteBot) Adb(parts string) ([]byte, error) { return []byte{}, nil } // nop
+func (b *RemoteBot) Adb(parts string) ([]byte, error) { return []byte{}, ErrNotSupport } // nop
 
 func (b *RemoteBot) Shell(parts string) ([]byte, error) {
 	t := task {
@@ -113,6 +113,11 @@ func (b *RemoteBot) Shell(parts string) ([]byte, error) {
 	}
 	b.op <- t
 	return []byte{}, nil
+}
+
+func (b *RemoteBot) ShellPipe(p1 io.ReadWriteCloser) (error) {
+	// create new connection, and switch to pipe mode
+	return ErrNotImpl
 }
 
 func (b *RemoteBot) TriggerScreencap() (err error) {

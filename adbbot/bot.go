@@ -3,6 +3,7 @@ package adbbot
 import (
 	"image"
 	"errors"
+	"io"
 )
 
 var (
@@ -20,6 +21,9 @@ type Bot interface {
 
 	Adb(parts string)    ([]byte, error)
 	Shell(parts string)  ([]byte, error)
+
+	// will block untill sh exit
+	ShellPipe(p1 io.ReadWriteCloser) (error)
 
 	TriggerScreencap()   (err error)
 	GetLastScreencap()   (image.Image)

