@@ -11,6 +11,21 @@ import (
 //	"image/jpeg"
 )
 
+const (
+	OP_CLICK  = iota
+	OP_SWIPE
+
+	OP_TOUCH
+	OP_KEY
+	OP_TEXT
+
+	OP_CAP
+	OP_PULL
+
+	OP_CMD    // no return data
+	OP_SHELL  // pipe
+)
+
 type Daemon struct {
 	Reflash     time.Duration
 
@@ -139,7 +154,7 @@ func (d *Daemon) handleConn(p1 net.Conn) {
 	}(p1, screenCh)
 
 	for {
-		todo, err := ReadTagStr(p1)
+		todo, err := ReadVLen(p1)
 		if err != nil {
 			Vln(2, "[todo]err", err)
 			return
@@ -147,7 +162,7 @@ func (d *Daemon) handleConn(p1 net.Conn) {
 		Vln(4, "[todo]", todo)
 
 		switch todo {
-		case "Touch":
+		case OP_TOUCH:
 			x, y, err := readXY(p1)
 			if err != nil {
 				Vln(2, "[todo][Touch]err", err)
@@ -159,9 +174,9 @@ func (d *Daemon) handleConn(p1 net.Conn) {
 				return
 			}
 			Vln(3, "[Touch]", x, y, ev)
-			d.bot.Touch(image.Pt(x, y), KeyAction(ev))
+			err = d.bot.Touch(image.Pt(x, y), KeyAction(ev))
 
-		case "Key":
+		case OP_KEY:
 			keycode, err := ReadTagStr(p1)
 			if err != nil {
 				Vln(2, "[todo][Key]err", err)
@@ -172,9 +187,25 @@ func (d *Daemon) handleConn(p1 net.Conn) {
 				Vln(2, "[todo][Key][Ev]err", err)
 				return
 			}
-			d.bot.Key(keycode, KeyAction(ev))
+			err = d.bot.Key(keycode, KeyAction(ev))
 
-		case "Screencap":
+		case OP_TEXT:
+			text, err := ReadVTagByte(p1)
+			if err != nil {
+				Vln(2, "[todo][Text]err", err)
+				return
+			}
+			err = d.bot.Text(string(text))
+
+		case OP_CMD:
+			text, err := ReadVTagByte(p1)
+			if err != nil {
+				Vln(2, "[todo][CMD]err", err)
+				return
+			}
+			d.bot.Shell(string(text))
+
+		case OP_CAP:
 			select {
 			case d.triggerCh <- struct{}{}:
 			default:
@@ -183,9 +214,7 @@ func (d *Daemon) handleConn(p1 net.Conn) {
 /*		case "ScreenSize":
 			WriteVLen(p1, int64(d.bot.ScreenBounds.Dx()))
 			WriteVLen(p1, int64(d.bot.ScreenBounds.Dy()))*/
-		case "GetScreen":
-			//WriteVTagByte(p1, buf.Bytes())
-//			screenCh <- struct{}{}
+		case OP_PULL:
 			d.screenReqMx.Lock()
 			_, ok := d.screenReq[screenCh]
 			if !ok {

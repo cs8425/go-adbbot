@@ -9,7 +9,7 @@ import (
 )
 
 type task struct {
-	Type      int	// 0 >> Key, 1 >> touch, 2 >> screencap, 3 >> shell
+	Type      int
 	Op        string
 	X0        int
 	Y0        int
@@ -57,17 +57,8 @@ func (b *RemoteBot) pushworker() {
 		todo := <- b.op
 
 		switch todo.Type {
-		case 0:
-			err = WriteTagStr(b.conn, "Key")
-			if err != nil {
-				Vln(2, "[send][Key]err", err, todo)
-				return
-			}
-			WriteTagStr(b.conn, todo.Op)
-			WriteVLen(b.conn, int64(todo.Ev))
-
-		case 1:
-			err = WriteTagStr(b.conn, "Touch")
+		case OP_TOUCH:
+			err = WriteVLen(b.conn, OP_TOUCH)
 			if err != nil {
 				Vln(2, "[send][Touch]err", err, todo)
 				return
@@ -76,15 +67,34 @@ func (b *RemoteBot) pushworker() {
 			WriteVLen(b.conn, int64(todo.Y0))
 			WriteVLen(b.conn, int64(todo.Ev))
 
-		case 2: // trigger screencap
-			err = WriteTagStr(b.conn, "Screencap")
+		case OP_KEY:
+			err = WriteVLen(b.conn, OP_KEY)
+			if err != nil {
+				Vln(2, "[send][Key]err", err, todo)
+				return
+			}
+			WriteTagStr(b.conn, todo.Op)
+			WriteVLen(b.conn, int64(todo.Ev))
+
+		case OP_TEXT:
+			fallthrough
+		case OP_CMD:
+			err = WriteVLen(b.conn, int64(todo.Type))
+			if err != nil {
+				Vln(2, "[send][Str]err", err, todo)
+				return
+			}
+			WriteVTagByte(b.conn, []byte(todo.Op))
+
+		case OP_CAP: // trigger screencap
+			err = WriteVLen(b.conn, OP_CAP)
 			if err != nil {
 				Vln(2, "[send][Screencap]err", err, todo)
 				return
 			}
 
-		case 3: // pull screen byte
-			err = WriteTagStr(b.conn, "GetScreen")
+		case OP_PULL: // pull screen byte
+			err = WriteVLen(b.conn, OP_PULL)
 			if err != nil {
 				Vln(2, "[send][GetScreen]err", err, todo)
 				return
@@ -98,7 +108,7 @@ func (b *RemoteBot) Adb(parts string) ([]byte, error) { return []byte{}, nil } /
 
 func (b *RemoteBot) Shell(parts string) ([]byte, error) {
 	t := task {
-		Type: 4,
+		Type: OP_CMD,
 		Op: parts,
 	}
 	b.op <- t
@@ -107,7 +117,7 @@ func (b *RemoteBot) Shell(parts string) ([]byte, error) {
 
 func (b *RemoteBot) TriggerScreencap() (err error) {
 	t := task {
-		Type: 2,
+		Type: OP_CAP,
 	}
 	b.op <- t
 	return
@@ -115,7 +125,7 @@ func (b *RemoteBot) TriggerScreencap() (err error) {
 
 func (b *RemoteBot) PullScreenByte() ([]byte, error) {
 	t := task {
-		Type: 3,
+		Type: OP_PULL,
 	}
 	b.op <- t
 
@@ -193,7 +203,13 @@ func (b *RemoteBot) Tap(loc image.Point) (err error) {
 }
 
 func (b *RemoteBot) Text(in string) (err error) {
-	return ErrNotImpl
+	t := task {
+		Type: OP_TEXT,
+		Op: in,
+	}
+	Vln(4, "[text]", t)
+	b.op <- t
+	return
 }
 
 func (b *RemoteBot) Press(in string) (err error) {
@@ -202,7 +218,7 @@ func (b *RemoteBot) Press(in string) (err error) {
 
 func (b *RemoteBot) Touch(loc image.Point, ty KeyAction) (err error) {
 	t := task {
-		Type: 1,
+		Type: OP_TOUCH,
 		X0: loc.X,
 		Y0: loc.Y,
 		Ev: ty,
@@ -214,7 +230,7 @@ func (b *RemoteBot) Touch(loc image.Point, ty KeyAction) (err error) {
 
 func (b *RemoteBot) Key(in string, ty KeyAction) (err error) {
 	t := task {
-		Type: 0,
+		Type: OP_KEY,
 		Op: in,
 		Ev: ty,
 	}
@@ -232,9 +248,37 @@ func (b *RemoteBot) Click(loc image.Point) (err error) {
 	return b.Touch(loc, KEY_UP)
 }
 
-func (b *RemoteBot) SwipeT(p0,p1 image.Point, time int) (err error) {
-//	_, err = i.bot.Shell("input swipe " + strconv.Itoa(p0.X) + " " + strconv.Itoa(p0.Y) + " " + strconv.Itoa(p1.X) + " " + strconv.Itoa(p1.Y) + " " + strconv.Itoa(time))
-	return ErrNotImpl
+func (b *RemoteBot) SwipeT(p0,p1 image.Point, dtime int) (err error) {
+	if dtime <= 0 {
+		dtime = 300
+	}
+	start := time.Now()
+	dur := time.Duration(dtime) * time.Millisecond
+
+	err = b.Touch(p0, KEY_DOWN)
+	if err != nil {
+		return
+	}
+
+	pt := image.Pt(0, 0)
+	pd := image.Pt(p1.X - p0.X, p1.Y - p0.Y)
+	esp := time.Since(start)
+	for esp < dur {
+		alpha := float64(esp) / float64(dur)
+		pt.X = p0.X + int(float64(pd.X) * alpha)
+		pt.Y = p0.Y + int(float64(pd.Y) * alpha)
+
+		err = b.Touch(pt, KEY_MV)
+		if err != nil {
+			return
+		}
+		time.Sleep(1 * time.Millisecond)
+
+		esp = time.Since(start)
+	}
+
+	err = b.Touch(p1, KEY_UP)
+	return
 }
 
 func (b *RemoteBot) Keyevent(in string) (err error) {
