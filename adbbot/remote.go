@@ -5,6 +5,7 @@ import (
 	"image"
 	"net"
 	"io"
+	"os/exec"
 	"time"
 )
 
@@ -115,9 +116,9 @@ func (b *RemoteBot) Shell(parts string) ([]byte, error) {
 	return []byte{}, nil
 }
 
-func (b *RemoteBot) ShellPipe(p1 io.ReadWriteCloser) (error) {
+func (b *RemoteBot) ShellPipe(p1 io.ReadWriteCloser, cmds string, blocking bool) (*exec.Cmd, error) {
 	// create new connection, and switch to pipe mode
-	return ErrNotImpl
+	return nil, ErrNotImpl
 }
 
 func (b *RemoteBot) TriggerScreencap() (err error) {

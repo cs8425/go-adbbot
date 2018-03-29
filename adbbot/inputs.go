@@ -47,39 +47,80 @@ type Monkey struct {
 
 	bot       Bot
 	conn	  net.Conn
+	die       chan struct{}
+	started   chan struct{}
 }
 
 func NewMonkey(b *LocalBot, port int) (*Monkey) {
 
-	forwardCmd := fmt.Sprintf("forward tcp:%d tcp:%d", port, port)
-	b.Adb(forwardCmd)
-
-	// set env: "EXTERNAL_STORAGE=/data/local/tmp"
-	monkeyCmd := fmt.Sprintf("monkey --port %d", port)
-	go b.Shell(monkeyCmd) // in background
-
-
-	addr := fmt.Sprintf("127.0.0.1:%d", port)
-
-TRYCONN:
-	conn, err := net.Dial("tcp", addr)
-	if err != nil {
-		Vln(3, "[monkey][conn]err", err)
-		time.Sleep(1000 * time.Millisecond)
-		goto TRYCONN
-	}
 	m := Monkey{
 		Port: port,
 		KeyDelta: 100 * time.Millisecond,
 
 		bot: b,
-		conn: conn,
+		die: make(chan struct{}),
+		started: make(chan struct{}, 1),
 	}
+
+	go m.wdt()
+
+	<-m.started // wait connection ok
 
 	return &m
 }
 
+func (m *Monkey) wdt() {
+	for {
+		select {
+		case <-m.die:
+			return
+		default:
+		}
+
+		forwardCmd := fmt.Sprintf("forward tcp:%d tcp:%d", m.Port, m.Port)
+		m.bot.Adb(forwardCmd)
+
+		// TODO: set env: "EXTERNAL_STORAGE=/data/local/tmp"
+		monkeyCmd := fmt.Sprintf("monkey --port %d", m.Port)
+		cmd, err := m.bot.ShellPipe(nil, monkeyCmd, false)
+		if err != nil {
+			Vln(3, "[monkey][start]err", err)
+			time.Sleep(1500 * time.Millisecond)
+			continue
+		}
+		m.tryConn()
+		cmd.Wait()
+
+		time.Sleep(500 * time.Millisecond)
+	}
+}
+
+func (m *Monkey) tryConn() {
+	for {
+		addr := fmt.Sprintf("127.0.0.1:%d", m.Port)
+		conn, err := net.Dial("tcp", addr)
+		if err == nil {
+			m.conn = conn
+
+			select {
+			case m.started <- struct{}{}:
+			default:
+			}
+
+			return
+		}
+		Vln(3, "[monkey][conn]err", err)
+		time.Sleep(1000 * time.Millisecond)
+	}
+}
+
 func (m *Monkey) Close() (err error) {
+	select {
+	case <-m.die:
+	default:
+		close(m.die)
+	}
+
 	m.conn.Write([]byte("done"))
 	return m.conn.Close()
 }
@@ -97,7 +138,7 @@ func (m *Monkey) Tap(loc image.Point) (err error) {
 }
 
 func (m *Monkey) Text(in string) (err error) {
-	str := fmt.Sprintf("type \"%s\"\n", in)
+	str := fmt.Sprintf("type %s\n", in)
 	err = m.send(str)
 	return
 }

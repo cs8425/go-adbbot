@@ -196,6 +196,9 @@ func (d *Daemon) handleConn(p1 net.Conn) {
 				return
 			}
 			err = d.bot.Text(string(text))
+			if err != nil {
+				Vln(2, "[run][Text]err", err)
+			}
 
 		case OP_CMD:
 			text, err := ReadVTagByte(p1)
@@ -203,7 +206,10 @@ func (d *Daemon) handleConn(p1 net.Conn) {
 				Vln(2, "[todo][CMD]err", err)
 				return
 			}
-			d.bot.Shell(string(text))
+			_, err = d.bot.Shell(string(text))
+			if err != nil {
+				Vln(2, "[run][CMD]err", err)
+			}
 
 		case OP_CAP:
 			select {
@@ -223,7 +229,7 @@ func (d *Daemon) handleConn(p1 net.Conn) {
 			d.screenReqMx.Unlock()
 
 		case OP_SHELL: // pipe shell
-			go d.bot.ShellPipe(p1)
+			go d.bot.ShellPipe(p1, "sh", true)
 			return
 
 /*		case "poll":

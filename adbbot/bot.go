@@ -4,6 +4,7 @@ import (
 	"image"
 	"errors"
 	"io"
+	"os/exec"
 )
 
 var (
@@ -23,7 +24,7 @@ type Bot interface {
 	Shell(parts string)  ([]byte, error)
 
 	// will block untill sh exit
-	ShellPipe(p1 io.ReadWriteCloser) (error)
+	ShellPipe(p1 io.ReadWriteCloser, cmds string, blocking bool) (*exec.Cmd, error)
 
 	TriggerScreencap()   (err error)
 	GetLastScreencap()   (image.Image)                // cached image

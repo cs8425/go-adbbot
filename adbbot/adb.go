@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os/exec"
+	"strings"
 )
 
 type LocalBot struct {
@@ -78,7 +79,11 @@ func (b *LocalBot) Adb(parts string) ([]byte, error) {
 		// nop
 		return []byte{}, nil
 	} else {
-		return Cmd(b.Exec + b.devstr + " " + parts)
+		parts := strings.Fields(b.Exec + b.devstr + " " + parts)
+		head := parts[0]
+		parts = parts[1:len(parts)]
+
+		return exec.Command(head, parts...).Output()
 	}
 }
 
@@ -91,23 +96,37 @@ func (b *LocalBot) Shell(parts string) ([]byte, error) {
 	}
 }
 
-func (b *LocalBot) ShellPipe(p1 io.ReadWriteCloser) (error) {
-	var cmdstr string
+func (b *LocalBot) ShellPipe(p1 io.ReadWriteCloser, cmds string, blocking bool) (*exec.Cmd, error) {
+	var parts []string
+
 	if b.IsOnDevice {
-		cmdstr = "sh"
+		parts = []string{"sh", "-c", cmds}
 	} else {
-		cmdstr = b.Exec + b.devstr + "shell"
+		parts = strings.Fields(b.Exec + b.devstr + " shell " + cmds)
 	}
 
-	cmd := exec.Command(cmdstr)
+	head := parts[0]
+	parts = parts[1:len(parts)]
+
+	//Vln(4, "[bot][ShellPipe]", p1, head, parts)
+
+	cmd := exec.Command(head, parts...)
 	cmd.Stdout = p1
 	cmd.Stderr = p1
 	cmd.Stdin = p1
-	err := cmd.Run()
-	if err != nil {
+	err := cmd.Start()
+	if err != nil && p1 != nil {
 		p1.Write([]byte(err.Error()))
 	}
-	return err
+
+	if blocking {
+		err = cmd.Wait()
+		if err != nil && p1 != nil {
+			p1.Write([]byte(err.Error()))
+		}
+	}
+
+	return cmd, err
 }
 
 func (b *LocalBot) Pipe(parts string) ([]byte, error) {
