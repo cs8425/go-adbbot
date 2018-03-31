@@ -4,14 +4,19 @@ import (
 	"image"
 	"sync/atomic"
 	"time"
+	"math"
 )
 
-func abs(a, b uint8) (int64){
-	c := int64(a) - int64(b)
-	return c * c
+func abs(a, b uint8) (int64) {
+/*	c := int64(a) - int64(b)
+	y := c >> 63
+	return (c ^ y) - y*/
+
+	c := int(a) - int(b)
+	return int64(c * c)
 }
 
-func FindExistReg(b Bot, tmpl *Tmpl, times int, delay int) (x int, y int, val float64){
+func FindExistReg(b Bot, tmpl *Tmpl, times int, delay int) (x int, y int, val float64) {
 
 	for i := 0; i < times; i++ {
 		Vln(5, "Screencap()", i)
@@ -20,46 +25,9 @@ func FindExistReg(b Bot, tmpl *Tmpl, times int, delay int) (x int, y int, val fl
 			continue
 		}
 
-		if !tmpl.Region.Empty() {
-			Vln(5, "crop", i)
-			var reg image.Rectangle
-			/*if b.TargetScreen != nil {
-				scriptsize := b.TargetScreen.Size()
-				screensize := b.ScreenBounds.Size()
-				reg = tmpl.Region
-				newMinX := reg.Min.X * screensize.X / scriptsize.X
-				newMaxX := reg.Max.X * screensize.X / scriptsize.X
-				newMinY := reg.Min.Y * screensize.Y / scriptsize.Y
-				newMaxY := reg.Max.Y * screensize.Y / scriptsize.Y
-				reg = image.Rect(newMinX, newMinY, newMaxX, newMaxY)
-				Vln(6, "crop Resize to", reg)
-			} else {
-				reg = img.Bounds().Intersect(tmpl.Region)
-			}*/
-			reg = img.Bounds().Intersect(tmpl.Region)
-			img = img.(*image.NRGBA).SubImage(reg)
-		}
-
 		Vln(5, "FindP()", i)
 //		timeStart()
-		/*if b.TargetScreen != nil {
-			scriptsize := b.TargetScreen.Size()
-			screensize := b.ScreenBounds.Size()
-			tmplsize := tmpl.Image.Bounds().Size()
-			newX := tmplsize.X * screensize.X / scriptsize.X
-			newY := tmplsize.Y * screensize.Y / scriptsize.Y
-			if (screensize.X == scriptsize.X) && (screensize.Y == scriptsize.Y) {
-				x, y, val = FindP(img, tmpl.Image)
-			} else {
-				Vln(5, "Resize to", newX, newY)
-				dstImage := Resize(tmpl.Image, newX, 0, Lanczos)
-				timeEnd("Resize()")
-				x, y, val = FindP(img, dstImage)
-			}
-		} else {
-			x, y, val = FindP(img, tmpl.Image)
-		}*/
-		x, y, val = FindP(img, tmpl.Image)
+		x, y, val = FindInTmpl(img, tmpl)
 //		timeEnd("FindP()")
 		if x != -1 && y != -1 {
 			Vln(4, "FindExistP()", x, y, val)
@@ -72,9 +40,15 @@ func FindExistReg(b Bot, tmpl *Tmpl, times int, delay int) (x int, y int, val fl
 	return
 }
 
-func FindRegCached(b Bot, tmpl *Tmpl, delay int) (x int, y int, val float64){
+func FindCachedReg(b Bot, tmpl *Tmpl, delay int) (x int, y int, val float64) {
 	img := b.GetLastScreencap()
+	x, y, val = FindInTmpl(img, tmpl)
+	Vln(4, "FindCachedReg()", x, y, val)
+	time.Sleep(time.Millisecond * time.Duration(delay))
+	return
+}
 
+func FindInTmpl(img image.Image, tmpl *Tmpl) (x int, y int, val float64) {
 	if !tmpl.Region.Empty() {
 		Vln(5, "crop", tmpl)
 		var reg image.Rectangle
@@ -82,21 +56,15 @@ func FindRegCached(b Bot, tmpl *Tmpl, delay int) (x int, y int, val float64){
 		img = img.(*image.NRGBA).SubImage(reg)
 	}
 
-	Vln(5, "FindP()", tmpl)
+	Vln(5, "FindInTmpl()", tmpl)
 //	timeStart()
 	x, y, val = FindP(img, tmpl.Image)
-//	timeEnd("FindP()")
-	if x != -1 && y != -1 {
-		Vln(4, "FindExistP()", x, y, val)
-		return
-	}
-
-	Vln(4, "FindExistP()", x, y, val)
-	time.Sleep(time.Millisecond * time.Duration(delay))
+//	timeEnd("FindInTmpl()")
+	Vln(4, "FindInTmpl()", x, y, val)
 	return
 }
 
-func FindExistP(b Bot, subimg image.Image, times int, delay int) (x int, y int, val float64){
+func FindExistImg(b Bot, subimg image.Image, times int, delay int) (x int, y int, val float64){
 
 	for i := 0; i < times; i++ {
 		Vln(5, "Screencap()", i)
@@ -125,6 +93,7 @@ func FindP(img image.Image, subimg image.Image) (x int, y int, val float64) {
 
 	x = -1
 	y = -1
+	val = 0
 
 	startX := img.Bounds().Min.X
 	endX := img.Bounds().Max.X - subimg.Bounds().Dx()
@@ -182,15 +151,11 @@ func FindP(img image.Image, subimg image.Image) (x int, y int, val float64) {
 			close(reduceCh)
 		}
 	}
-	val = (1 - (float64(min) / float64(255 * 255 * 3 * subimg.Bounds().Dy() * subimg.Bounds().Dx())))
+	val = calcVal(subimg, min)
 
-	timeEnd("FindP2()")
+	timeEnd("FindP()")
 
-	if x == -1 && y == -1 {
-		return -1, -1, 0
-	} else {
-		return x, y, val
-	}
+	return x, y, val
 }
 
 func Find(img image.Image, subimg image.Image) (x int, y int, val float64) {
@@ -198,6 +163,7 @@ func Find(img image.Image, subimg image.Image) (x int, y int, val float64) {
 
 	x = -1
 	y = -1
+	val = 0
 
 	startX := img.Bounds().Min.X
 	endX := img.Bounds().Max.X - subimg.Bounds().Dx()
@@ -228,16 +194,11 @@ func Find(img image.Image, subimg image.Image) (x int, y int, val float64) {
 
 		}
 	}
-
-	val = (1 - (float64(min) / float64(255 * 255 * 3 * subimg.Bounds().Dy() * subimg.Bounds().Dx())))
+	val = calcVal(subimg, min)
 
 	timeEnd("Find()")
 
-	if x == -1 && y == -1 {
-		return -1, -1, 0
-	} else {
-		return x, y, val
-	}
+	return x, y, val
 }
 
 func CmpAt(img *image.NRGBA, subimg *image.NRGBA, offX int, offY int, limit int64) (int64) {
@@ -262,11 +223,11 @@ func CmpAt(img *image.NRGBA, subimg *image.NRGBA, offX int, offY int, limit int6
 
 	// BCE
 	bound1 := img.PixOffset(offX, offY)
-	bound2 := img.PixOffset(dX + offX, dY + offY)
+	bound2 := img.PixOffset(dX + offX, dY + offY) + 3
 	_ = img.Pix[bound1:bound2]
 
 	bound1 = subimg.PixOffset(0, 0)
-	bound2 = subimg.PixOffset(dX-1, dY-1)
+	bound2 = subimg.PixOffset(dX-1, dY-1) + 3
 	_ = subimg.Pix[bound1:bound2]
 
 	// start
@@ -275,6 +236,10 @@ func CmpAt(img *image.NRGBA, subimg *image.NRGBA, offX int, offY int, limit int6
 
 			oi := img.PixOffset(j + offX, i + offY)
 			si := subimg.PixOffset(j, i)
+
+			if subimg.Pix[si + 3] == 0 { // alpha = 0 >> transparent, skip calculate
+				continue
+			}
 
 			diff += abs(img.Pix[oi + 0], subimg.Pix[si + 0])
 			diff += abs(img.Pix[oi + 1], subimg.Pix[si + 1])
@@ -292,4 +257,45 @@ END:
 	return diff
 }
 
+func calcVal(img image.Image, diff int64) (float64) {
+	var alpha int64 = 0
+
+	subimg, ok := img.(*image.NRGBA)
+	if !ok {
+		return 0.0
+	}
+
+	startX := subimg.Bounds().Min.X
+	endX := subimg.Bounds().Max.X
+
+	startY := subimg.Bounds().Min.Y
+	endY := subimg.Bounds().Max.Y
+
+	bound1 := subimg.PixOffset(startX, startY)
+	bound2 := subimg.PixOffset(endX-1, endY-1) + 3
+	_ = subimg.Pix[bound1:bound2]
+
+	for i := startX; i < endY; i++ {
+		for j := startX; j < endX; j++ {
+			si := subimg.PixOffset(j, i)
+			// alpha = 0 >> transparent, skip calculate
+//			alpha += int64(subimg.Pix[si + 3])
+			a := int64(subimg.Pix[si + 3])
+			alpha += a * a
+		}
+	}
+
+	if alpha == 0 {
+		return 1
+	}
+
+//	val := float64(diff) / float64(alpha * 3)
+//	val = 1 - val
+	val := float64(diff) / float64(alpha * 3)
+	val = 1 - math.Sqrt(val)
+
+	Vln(4, "calcVal()", diff, val, alpha, subimg.Bounds().Dx()*subimg.Bounds().Dy())
+
+	return val
+}
 
