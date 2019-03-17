@@ -49,6 +49,7 @@ type Monkey struct {
 	conn	  net.Conn
 	die       chan struct{}
 	started   chan struct{}
+	restart   chan struct{}
 }
 
 func NewMonkey(b *LocalBot, port int) (*Monkey) {
@@ -60,6 +61,7 @@ func NewMonkey(b *LocalBot, port int) (*Monkey) {
 		bot: b,
 		die: make(chan struct{}),
 		started: make(chan struct{}, 1),
+		restart: make(chan struct{}, 1),
 	}
 
 	go m.wdt()
@@ -77,41 +79,57 @@ func (m *Monkey) wdt() {
 		default:
 		}
 
-		forwardCmd := fmt.Sprintf("forward tcp:%d tcp:%d", m.Port, m.Port)
-		m.bot.Adb(forwardCmd)
-
-		// TODO: set env: "EXTERNAL_STORAGE=/data/local/tmp"
-		monkeyCmd := fmt.Sprintf("monkey --port %d", m.Port)
-		cmd, err := m.bot.ShellPipe(nil, monkeyCmd, false)
-		if err != nil {
-			Vln(3, "[monkey][start]err", err)
+		ok := m.tryStart()
+		if !ok {
 			time.Sleep(1500 * time.Millisecond)
 			continue
 		}
-		m.tryConn()
-		cmd.Wait()
-
 		time.Sleep(500 * time.Millisecond)
+
+		ok = m.tryConn()
+		if !ok {
+			time.Sleep(1500 * time.Millisecond)
+			continue
+		}
+
+		<-m.restart
+		Vln(3, "[monkey][restart]")
 	}
 }
 
-func (m *Monkey) tryConn() {
-	for {
-		addr := fmt.Sprintf("127.0.0.1:%d", m.Port)
-		conn, err := net.Dial("tcp", addr)
-		if err == nil {
-			m.conn = conn
+func (m *Monkey) tryStart() bool {
+	forwardCmd := fmt.Sprintf("forward tcp:%d tcp:%d", m.Port, m.Port)
+	m.bot.Adb(forwardCmd)
 
-			select {
-			case m.started <- struct{}{}:
-			default:
-			}
-
-			return
-		}
-		Vln(3, "[monkey][conn]err", err)
-		time.Sleep(1000 * time.Millisecond)
+	// TODO: set env: "EXTERNAL_STORAGE=/data/local/tmp"
+	monkeyCmd := fmt.Sprintf("monkey --port %d", m.Port)
+	_, err := m.bot.ShellPipe(nil, monkeyCmd, false)
+	if err != nil {
+		Vln(3, "[monkey][start]err", err)
+		return false
 	}
+	//cmd.Wait()
+	//Vln(3, "[monkey][exit]")
+	return true
+}
+
+func (m *Monkey) tryConn() bool {
+	addr := fmt.Sprintf("127.0.0.1:%d", m.Port)
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		Vln(3, "[monkey][conn]err", err)
+		return false
+	}
+
+	Vln(5, "[monkey][new]", m.conn, conn)
+	m.conn = conn
+
+	select {
+	case m.started <- struct{}{}:
+	default:
+	}
+
+	return true
 }
 
 func (m *Monkey) Close() (err error) {
@@ -127,6 +145,10 @@ func (m *Monkey) Close() (err error) {
 
 func (m *Monkey) send(cmd string) (err error) {
 	_, err = m.conn.Write([]byte(cmd))
+	Vln(4, "[monkey][send]", cmd, err)
+	if err != nil {
+		m.restart <- struct{}{}
+	}
 	return
 }
 
