@@ -25,7 +25,7 @@ func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	adbbot.Verbosity = *verbosity
-	bot := adbbot.NewBot(*DEV, *ADB)
+	bot := adbbot.NewLocalBot(*DEV, *ADB)
 
 	// run on android by adb user(shell)
 	bot.IsOnDevice = *OnDevice
