@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"sync/atomic"
 
 	"log"
 	"runtime"
@@ -50,6 +51,14 @@ func ws(w http.ResponseWriter, r *http.Request) {
 	defer c.Close()
 
 	newclients <- c
+
+	atomic.AddInt32(&clientCount, int32(1))
+	defer atomic.AddInt32(&clientCount, int32(-1))
+
+	select{
+	case pollNotify <- struct{}{}:
+	default:
+	}
 
 	for {
 		mt, msgb, err := c.ReadMessage()
@@ -169,25 +178,19 @@ func broacast() {
 	}
 }
 
+var clientCount int32 = 0
+var pollNotify = make(chan struct{}, 1)
 func pollimg(bot adbbot.Bot) {
 	var err error
 	var buf []byte
 
 	limit := time.Duration(*reflash) * time.Millisecond
 
-/*	conn, err := net.Dial("tcp", *daemonAddr)
-	if err != nil {
-		Vln(1, "error connct to", *daemonAddr)
-		return
-	}
-
-	bot, err := adbbot.NewRemoteBot(conn, *compress)
-	if err != nil {
-		Vln(1, "connct to", *daemonAddr, "err:", err)
-		return
-	}*/
-
 	for {
+		if atomic.LoadInt32(&clientCount) == 0 { // block untill have any client
+			<- pollNotify
+		}
+
 		start := time.Now()
 		err = bot.TriggerScreencap()
 		if err != nil {
