@@ -103,12 +103,12 @@ func (m *Monkey) tryStart() bool {
 
 	// TODO: set env: "EXTERNAL_STORAGE=/data/local/tmp"
 	monkeyCmd := fmt.Sprintf("monkey --port %d", m.Port)
-	_, err := m.bot.ShellPipe(nil, monkeyCmd, false)
+	cmd, err := m.bot.ShellPipe(nil, monkeyCmd, false)
 	if err != nil {
 		Vln(3, "[monkey][start]err", err)
 		return false
 	}
-	//cmd.Wait()
+	go cmd.Wait() // for zombie clean
 	//Vln(3, "[monkey][exit]")
 	return true
 }
