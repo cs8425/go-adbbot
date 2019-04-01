@@ -311,14 +311,14 @@ var html = `<!doctype html>
 <script src="//code.jquery.com/jquery-3.1.0.min.js"></script>
 <style>
 html, body {
-	margin: 2px;
+	margin: .1em;
 }
 body > div {
 	height: 10vh;
 }
 #screen {
-    width: auto;
-    height: 85vh;
+	max-width: calc(100vw - 0.4em);
+	max-height: 85vh;
 }
 #btns {
 	margin: 8px;

@@ -4,6 +4,7 @@ import (
 	"net"
 	"time"
 	"sync"
+	"sync/atomic"
 
 	"bytes"
 	"image"
@@ -39,6 +40,7 @@ type Daemon struct {
 
 	screenReq   map[(chan struct{})](chan struct{})
 	screenReqMx sync.Mutex
+	caping      int32
 }
 
 func NewDaemon(ln net.Listener, bot Bot, comp bool) (*Daemon, error) {
@@ -94,6 +96,7 @@ func (d *Daemon) screenCoder() {
 	for {
 		_, ok := <- d.triggerCh
 		if !ok {
+			atomic.StoreInt32(&d.caping, 0)
 			return
 		}
 //		if time.Since(d.captime) >= d.Reflash { // keep away from impossible screencap frequency
@@ -106,6 +109,7 @@ func (d *Daemon) screenCoder() {
 			Vln(4, "[screen][encode]", time.Since(d.captime))
 
 			d.screenReqMx.Lock()
+			atomic.StoreInt32(&d.caping, 0)
 			for _, req := range d.screenReq {
 				select {
 				case <- req:
@@ -139,17 +143,29 @@ func (b *pngBuf) Get() (*png.EncoderBuffer) {
 }
 func (b *pngBuf) Put(*png.EncoderBuffer) { }
 
+type puller struct {
+	times int32
+	ch chan struct{}
+}
 func (d *Daemon) handleConn(p1 net.Conn) {
 
-	screenCh := make(chan struct{}, 1)
-	defer close(screenCh)
-	go func (p1 net.Conn, ch chan struct{}) {
+	screenCh := &puller{
+		times: 0,
+		ch: make(chan struct{}, 1),
+	}
+	defer close(screenCh.ch)
+	go func (p1 net.Conn, ch *puller) {
 		for {
-			_, ok := <- ch
+			_, ok := <- ch.ch
 			if !ok {
 				return
 			}
-			WriteVTagByte(p1, d.screenBuf.Bytes())
+			Vln(4, "[screen][send]", atomic.LoadInt32(&ch.times))
+			n := atomic.LoadInt32(&ch.times)
+			for n > 0 {
+				WriteVTagByte(p1, d.screenBuf.Bytes())
+				n = atomic.AddInt32(&ch.times, int32(-1))
+			}
 		}
 	}(p1, screenCh)
 
@@ -212,6 +228,7 @@ func (d *Daemon) handleConn(p1 net.Conn) {
 			}
 
 		case OP_CAP:
+			atomic.StoreInt32(&d.caping, 1)
 			select {
 			case d.triggerCh <- struct{}{}:
 			default:
@@ -221,12 +238,21 @@ func (d *Daemon) handleConn(p1 net.Conn) {
 			WriteVLen(p1, int64(d.bot.ScreenBounds.Dx()))
 			WriteVLen(p1, int64(d.bot.ScreenBounds.Dy()))*/
 		case OP_PULL:
-			d.screenReqMx.Lock()
-			_, ok := d.screenReq[screenCh]
-			if !ok {
-				d.screenReq[screenCh] = screenCh
+			atomic.AddInt32(&screenCh.times, int32(1))
+			if atomic.LoadInt32(&d.caping) == 0 {
+				screenCh.ch <- struct{}{} // no trigger, send last image
+			} else {
+				d.screenReqMx.Lock()
+				if atomic.LoadInt32(&d.caping) == 0 {
+					screenCh.ch <- struct{}{} // already finish trigger, send last image
+				} else {
+					_, ok := d.screenReq[screenCh.ch]
+					if !ok {
+						d.screenReq[screenCh.ch] = screenCh.ch
+					}
+				}
+				d.screenReqMx.Unlock()
 			}
-			d.screenReqMx.Unlock()
 
 		case OP_SHELL: // pipe shell
 			go d.bot.ShellPipe(p1, "sh", true)

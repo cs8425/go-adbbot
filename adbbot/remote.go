@@ -3,9 +3,10 @@ package adbbot
 import (
 	"bytes"
 	"image"
-	"net"
 	"io"
+	"net"
 	"os/exec"
+	"sync"
 	"time"
 )
 
@@ -21,6 +22,7 @@ type RemoteBot struct {
 
 	ScreenBounds    image.Rectangle
 	lastScreencap   image.Image
+	capLock         sync.Mutex
 
 	conn            net.Conn // cmd
 
@@ -130,6 +132,9 @@ func (b *RemoteBot) TriggerScreencap() (err error) {
 }
 
 func (b *RemoteBot) PullScreenByte() ([]byte, error) {
+	b.capLock.Lock()
+	defer b.capLock.Unlock()
+
 	t := task {
 		Type: OP_PULL,
 	}
