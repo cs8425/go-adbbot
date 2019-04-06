@@ -3,6 +3,7 @@ package adbbot
 import (
 	"bytes"
 	"image"
+	"image/png"
 	"io"
 	"net"
 	"os/exec"
@@ -29,6 +30,8 @@ type RemoteBot struct {
 	FindOnDaemon    bool // TODO
 	compress        bool
 	op              chan task
+	decomp          *DiffImgDeComp
+	screenBuf   bytes.Buffer
 
 	KeyDelta  time.Duration
 
@@ -36,16 +39,20 @@ type RemoteBot struct {
 }
 
 func NewRemoteBot(conn net.Conn, comp bool) (*RemoteBot, error) {
-	if comp {
+	/*if comp {
 		//conn = NewFlateStream(conn, 1)
 		conn = NewCompStream(conn, 1)
-	}
+	}*/
 
 	b := RemoteBot {
 		compress: comp,
-		conn: conn,
+		conn: NewCompStream(conn, 1),
 		op: make(chan task, 4),
 		KeyDelta: 100 * time.Millisecond,
+	}
+
+	if comp {
+		b.decomp = NewDiffImgDeComp()
 	}
 
 	go b.pushworker()
@@ -151,8 +158,20 @@ func (b *RemoteBot) PullScreenByte() ([]byte, error) {
 	}
 
 	// decode
-	r := bytes.NewReader(pngByte)
-	img, err := Decode(r)
+	var img image.Image
+	if b.compress {
+		img, err = b.decomp.Decode(pngByte)
+		encoder := png.Encoder{
+//			CompressionLevel: png.BestSpeed,
+			CompressionLevel: png.NoCompression,
+		}
+		b.screenBuf.Reset()
+		encoder.Encode(&b.screenBuf, img)
+		pngByte = cp(b.screenBuf.Bytes())
+	} else {
+		r := bytes.NewReader(pngByte)
+		img, err = Decode(r)
+	}
 	if err != nil {
 		return nil, err
 	}

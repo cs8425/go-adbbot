@@ -38,7 +38,7 @@ type Daemon struct {
 	triggerCh   chan struct{}
 	screenBuf   bytes.Buffer
 
-	screenReq   map[(chan struct{})](chan struct{})
+	screenReq   map[(chan []byte)](chan []byte)
 	screenReqMx sync.Mutex
 	caping      int32
 }
@@ -50,7 +50,7 @@ func NewDaemon(ln net.Listener, bot Bot, comp bool) (*Daemon, error) {
 		compress: comp,
 
 		triggerCh: make(chan struct{}, 1),
-		screenReq: make(map[(chan struct{})](chan struct{})),
+		screenReq: make(map[(chan []byte)](chan []byte)),
 
 		Reflash: 500 * time.Millisecond,
 	}
@@ -73,11 +73,11 @@ func (d *Daemon) Listen() {
 			Vln(2, "[Daemon]Error Accept:", err)
 			return
 		}
-		if d.compress {
+		/*if d.compress {
 //			conn = NewFlateStream(conn, 1)
 			conn = NewCompStream(conn, 1)
-		}
-		go d.handleConn(conn)
+		}*/
+		go d.handleConn(NewCompStream(conn, 1))
 	}
 
 }
@@ -103,10 +103,14 @@ func (d *Daemon) screenCoder() {
 			d.captime = time.Now()
 			d.bot.TriggerScreencap()
 			Vln(4, "[screen][trigger]", time.Since(d.captime))
-			d.screenBuf.Reset()
-			encoder.Encode(&d.screenBuf, d.bot.GetLastScreencap())
-//			jpeg.Encode(&d.screenBuf, d.bot.GetLastScreencap(), option)
-			Vln(4, "[screen][encode]", time.Since(d.captime))
+			var imgByte []byte
+			if !d.compress {
+				d.screenBuf.Reset()
+				encoder.Encode(&d.screenBuf, d.bot.GetLastScreencap())
+//				jpeg.Encode(&d.screenBuf, d.bot.GetLastScreencap(), option)
+				imgByte = cp(d.screenBuf.Bytes())
+				Vln(4, "[screen][encode]", time.Since(d.captime))
+			}
 
 			d.screenReqMx.Lock()
 			atomic.StoreInt32(&d.caping, 0)
@@ -114,10 +118,10 @@ func (d *Daemon) screenCoder() {
 				select {
 				case <- req:
 				default:
-					req <- struct{}{}
+					req <- imgByte
 				}
 			}
-			d.screenReq = make(map[(chan struct{})](chan struct{}))
+			d.screenReq = make(map[(chan []byte)](chan []byte))
 			d.screenReqMx.Unlock()
 //		}
 	}
@@ -145,29 +149,51 @@ func (b *pngBuf) Put(*png.EncoderBuffer) { }
 
 type puller struct {
 	times int32
-	ch chan struct{}
+	ch chan []byte
 }
 func (d *Daemon) handleConn(p1 net.Conn) {
 
 	screenCh := &puller{
 		times: 0,
-		ch: make(chan struct{}, 1),
+		ch: make(chan []byte, 1),
 	}
 	defer close(screenCh.ch)
-	go func (p1 net.Conn, ch *puller) {
-		for {
-			_, ok := <- ch.ch
-			if !ok {
-				return
+
+	if !d.compress {
+		go func (p1 net.Conn, ch *puller) {
+			for {
+				buf, ok := <- ch.ch
+				if !ok {
+					return
+				}
+				Vln(4, "[screen][send]", atomic.LoadInt32(&ch.times))
+				n := atomic.LoadInt32(&ch.times)
+				for n > 0 {
+					//WriteVTagByte(p1, d.screenBuf.Bytes())
+					WriteVTagByte(p1, buf)
+					n = atomic.AddInt32(&ch.times, int32(-1))
+				}
 			}
-			Vln(4, "[screen][send]", atomic.LoadInt32(&ch.times))
-			n := atomic.LoadInt32(&ch.times)
-			for n > 0 {
-				WriteVTagByte(p1, d.screenBuf.Bytes())
-				n = atomic.AddInt32(&ch.times, int32(-1))
+		}(p1, screenCh)
+	} else {
+		go func (p1 net.Conn, ch *puller) {
+			encoder := NewDiffImgComp(&d.screenBuf, 3)
+			for {
+				_, ok := <- ch.ch
+				if !ok {
+					return
+				}
+				out := encoder.Encode(d.bot.GetLastScreencap())
+				Vln(4, "[screen][send]", atomic.LoadInt32(&ch.times))
+				n := atomic.LoadInt32(&ch.times)
+				for n > 0 {
+					//WriteVTagByte(p1, d.screenBuf.Bytes())
+					WriteVTagByte(p1, out)
+					n = atomic.AddInt32(&ch.times, int32(-1))
+				}
 			}
-		}
-	}(p1, screenCh)
+		}(p1, screenCh)
+	}
 
 	for {
 		todo, err := ReadVLen(p1)
@@ -240,11 +266,11 @@ func (d *Daemon) handleConn(p1 net.Conn) {
 		case OP_PULL:
 			atomic.AddInt32(&screenCh.times, int32(1))
 			if atomic.LoadInt32(&d.caping) == 0 {
-				screenCh.ch <- struct{}{} // no trigger, send last image
+				screenCh.ch <- []byte{} // no trigger, send last image
 			} else {
 				d.screenReqMx.Lock()
 				if atomic.LoadInt32(&d.caping) == 0 {
-					screenCh.ch <- struct{}{} // already finish trigger, send last image
+					screenCh.ch <- []byte{} // already finish trigger, send last image
 				} else {
 					_, ok := d.screenReq[screenCh.ch]
 					if !ok {

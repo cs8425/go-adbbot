@@ -266,6 +266,8 @@ func main() {
 	flag.Parse()
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
+//	adbbot.Verbosity = *verbosity
+
 	upgrader.EnableCompression = *wsComp
 	Vf(1, "ws EnableCompression = %v\n", *wsComp)
 	Vf(1, "server Listen @ %v\n", *localAddr)
