@@ -31,7 +31,8 @@ type RemoteBot struct {
 	compress        bool
 	op              chan task
 	decomp          *DiffImgDeComp
-	screenBuf   bytes.Buffer
+	screenBuf       bytes.Buffer
+	pngcomp         bool
 
 	KeyDelta  time.Duration
 
@@ -39,19 +40,20 @@ type RemoteBot struct {
 }
 
 func NewRemoteBot(conn net.Conn, comp bool) (*RemoteBot, error) {
-	/*if comp {
+	if comp {
 		//conn = NewFlateStream(conn, 1)
 		conn = NewCompStream(conn, 1)
-	}*/
+	}
 
 	b := RemoteBot {
 		compress: comp,
-		conn: NewCompStream(conn, 1),
+		pngcomp: false,
+		conn: conn,
 		op: make(chan task, 4),
 		KeyDelta: 100 * time.Millisecond,
 	}
 
-	if comp {
+	if !b.pngcomp {
 		b.decomp = NewDiffImgDeComp()
 	}
 
@@ -159,8 +161,17 @@ func (b *RemoteBot) PullScreenByte() ([]byte, error) {
 
 	// decode
 	var img image.Image
-	if b.compress {
+	if b.pngcomp {
+		r := bytes.NewReader(pngByte)
+		img, err = Decode(r)
+		if err != nil {
+			return nil, err
+		}
+	} else {
 		img, err = b.decomp.Decode(pngByte)
+		if err != nil {
+			return nil, err
+		}
 		encoder := png.Encoder{
 //			CompressionLevel: png.BestSpeed,
 			CompressionLevel: png.NoCompression,
@@ -168,12 +179,6 @@ func (b *RemoteBot) PullScreenByte() ([]byte, error) {
 		b.screenBuf.Reset()
 		encoder.Encode(&b.screenBuf, img)
 		pngByte = cp(b.screenBuf.Bytes())
-	} else {
-		r := bytes.NewReader(pngByte)
-		img, err = Decode(r)
-	}
-	if err != nil {
-		return nil, err
 	}
 
 	// save Screen info

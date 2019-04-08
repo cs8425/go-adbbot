@@ -9,6 +9,7 @@ import (
 	"github.com/golang/snappy"
 )
 
+
 func cp(a []byte) []byte {
 	b := make([]byte, len(a), len(a))
 	copy(b, a)
@@ -31,15 +32,15 @@ func NewDiffImgComp(buf *bytes.Buffer, n int) *DiffImgComp {
 	return o
 }
 
-func (o *DiffImgComp) Encode(img image.Image) []byte {
+func (o *DiffImgComp) Encode(img image.Image, foreIframe bool) ([]byte, error) {
 	o.buf.Reset()
 
 	nrgba, ok := img.(*image.NRGBA)
 	if !ok {
-		return nil //error
+		return nil, ErrUnsupportedFormat
 	}
 
-	if o.ref == nil {
+	if o.ref == nil || foreIframe {
 		goto FAILBACK
 	}
 
@@ -63,44 +64,44 @@ func (o *DiffImgComp) Encode(img image.Image) []byte {
 			iFrame(nrgba, o.w)
 			o.w.Flush()
 		}
-		return o.buf.Bytes()
+		return o.buf.Bytes(), nil
 	}
 
 FAILBACK:
 	iFrame(nrgba, o.w)
 	o.w.Flush()
 	o.ref = nrgba
-	return o.buf.Bytes()
+	return o.buf.Bytes(), nil
 }
 
-func (o *DiffImgComp) Encode2(img image.Image) []byte {
+func (o *DiffImgComp) Encode2(img image.Image, foreIframe bool) ([]byte, error) {
 	o.buf.Reset()
 
 	nrgba, ok := img.(*image.NRGBA)
 	if !ok {
-		return nil //error
+		return nil, ErrUnsupportedFormat
 	}
 
-	if o.ref == nil {
+	if o.ref == nil || foreIframe {
 		goto FAILBACK
 	}
 
-	if o.c == 0 {
+	/*if o.c == 0 {
 		o.c = o.N // I + P * o.N
 		goto FAILBACK
 	}
-	o.c -= 1
+	o.c -= 1*/
 
 	{
 		pFrame(nrgba, o.ref, o.buf)
 		o.ref = nrgba
-		return o.buf.Bytes()
+		return o.buf.Bytes(), nil
 	}
 
 FAILBACK:
 	iFrame(nrgba, o.buf)
 	o.ref = nrgba
-	return o.buf.Bytes()
+	return o.buf.Bytes(), nil
 }
 
 func pFrame(img *image.NRGBA, refimg *image.NRGBA, buf io.Writer) {
@@ -128,6 +129,9 @@ func pFrame(img *image.NRGBA, refimg *image.NRGBA, buf io.Writer) {
 			oi := img.PixOffset(j, i)
 			si := refimg.PixOffset(j, i)
 			ti := (i * dX + j) * 3
+
+			//r, g, b := int16(refimg.Pix[si + 0]) - int16(img.Pix[oi + 0]), int16(refimg.Pix[si + 1]) - int16(img.Pix[oi + 1]), int16(refimg.Pix[si + 2]) - int16(img.Pix[oi + 2])
+			//tmp[ti + 0], tmp[ti + 1], tmp[ti + 2] = r, g, b
 
 			tmp[ti + 0] = int16(refimg.Pix[si + 0]) - int16(img.Pix[oi + 0])
 			tmp[ti + 1] = int16(refimg.Pix[si + 1]) - int16(img.Pix[oi + 1])
@@ -238,7 +242,6 @@ func (o *DiffImgDeComp) decode(imgByte []byte, r io.Reader) (image.Image, error)
 	return nrgba, nil
 }
 func iFrameParse(img *image.NRGBA, dX int, dY int) {
-	//Vln(4, "[DiffImgDeComp]I", len(img.Pix), dX, dY)
 	for i := int(dY - 1); i >= 0; i-- {
 		for j := int(dX - 1); j >= 0; j-- {
 			si := img.PixOffset(j, i)
@@ -248,16 +251,9 @@ func iFrameParse(img *image.NRGBA, dX int, dY int) {
 	}
 }
 func pFrameParse(pixIn io.Reader, img *image.NRGBA, dX int, dY int, ref *image.NRGBA) {
-	offset := 0
-
 	reader := &byteReader{pixIn}
 	ReadVLen := func () (int, error){
 		t, err := binary.ReadVarint(reader)
-		if t <= 0x80 || t >= -0x80 {
-			offset += 1
-		} else {
-			offset += 2
-		}
 		return int(t), err
 	}
 
@@ -265,7 +261,6 @@ func pFrameParse(pixIn io.Reader, img *image.NRGBA, dX int, dY int, ref *image.N
 		return int(ref.Pix[ri + 0]), int(ref.Pix[ri + 1]), int(ref.Pix[ri + 2])
 	}
 
-	count := 0
 	for i := 0; i < dY; i++ {
 		for j := 0; j < dX; j++ {
 			si := img.PixOffset(j, i)
@@ -290,10 +285,7 @@ func pFrameParse(pixIn io.Reader, img *image.NRGBA, dX int, dY int, ref *image.N
 			b = b - t
 
 			img.Pix[si + 0], img.Pix[si + 1], img.Pix[si + 2], img.Pix[si + 3] = uint8(r), uint8(g), uint8(b), 0xff
-
-			count += 1
 		}
 	}
-//	Vln(6, "[DiffImgDeComp]P", len(img.Pix), dX, dY, count, offset, img.Stride, img.Rect, ref.Stride, ref.Rect)
 }
 
