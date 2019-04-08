@@ -44,6 +44,11 @@ func (o *DiffImgComp) Encode(img image.Image, foreIframe bool) ([]byte, error) {
 		goto FAILBACK
 	}
 
+	// for screen rotation change
+	if !img.Bounds().Eq(o.ref.Bounds()) {
+		goto FAILBACK
+	}
+
 	/*if o.c == 0 {
 		o.c = o.N // I + P * o.N
 		goto FAILBACK
@@ -51,8 +56,9 @@ func (o *DiffImgComp) Encode(img image.Image, foreIframe bool) ([]byte, error) {
 	o.c -= 1*/
 
 	{
-		dX := img.Bounds().Dx()
-		dY := img.Bounds().Dy()
+		bound := img.Bounds()
+		dX := bound.Dx()
+		dY := bound.Dy()
 		maxSize := dX * dY * 3
 
 		pFrame(nrgba, o.ref, o.w)
@@ -83,6 +89,11 @@ func (o *DiffImgComp) Encode2(img image.Image, foreIframe bool) ([]byte, error) 
 	}
 
 	if o.ref == nil || foreIframe {
+		goto FAILBACK
+	}
+
+	// for screen rotation change
+	if !img.Bounds().Eq(o.ref.Bounds()) {
 		goto FAILBACK
 	}
 
