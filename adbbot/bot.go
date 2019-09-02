@@ -36,6 +36,8 @@ type Bot interface {
 //	ScreenBounds()           (image.Rectangle)
 	Remap(loc image.Point)   (image.Point)
 
+	ImgCompLv(lv int)
+
 	// input
 	Input
 

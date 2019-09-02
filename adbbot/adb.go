@@ -137,6 +137,10 @@ func (b *LocalBot) Pipe(parts string) ([]byte, error) {
 	}
 }
 
+func (b *LocalBot) ImgCompLv(lv int) {
+
+}
+
 func (b *LocalBot) TriggerScreencap() (err error) {
 	var screencap []byte
 

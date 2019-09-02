@@ -29,6 +29,7 @@ const (
 
 type Daemon struct {
 	Reflash     time.Duration
+	imgComp     int // Image Compress Level
 
 	ln          net.Listener
 	bot         Bot
@@ -38,6 +39,7 @@ type Daemon struct {
 	captime     time.Time // lock?
 	triggerCh   chan struct{}
 	screenBuf   bytes.Buffer
+	encoder     *png.Encoder
 
 	screenReq   map[(chan []byte)](chan []byte)
 	screenReqMx sync.Mutex
@@ -55,6 +57,7 @@ func NewDaemon(ln net.Listener, bot Bot, comp bool) (*Daemon, error) {
 		screenReq: make(map[(chan []byte)](chan []byte)),
 
 		Reflash: 500 * time.Millisecond,
+		imgComp: -1,
 	}
 
 	go d.screenCoder()
@@ -84,14 +87,31 @@ func (d *Daemon) Listen() {
 
 }
 
+func (d *Daemon) ImgCompLv(lv int) {
+	switch lv {
+	case 0: // DefaultCompression
+	case -1: // NoCompression
+	case -2: // BestSpeed
+	case -3: // BestCompression
+	default:
+		lv = int(png.NoCompression)
+	}
+	d.imgComp = lv
+
+	if d.encoder != nil {
+		d.encoder.CompressionLevel = png.CompressionLevel(d.imgComp)
+	}
+}
+
 func (d *Daemon) screenCoder() {
 	// jpg option
 //	option := &jpeg.Options{100}
 
 	encBuf := &pngBuf{}
-	encoder := png.Encoder{
+	d.encoder = &png.Encoder{
 //		CompressionLevel: png.BestSpeed,
-		CompressionLevel: png.NoCompression,
+//		CompressionLevel: png.NoCompression,
+		CompressionLevel: png.CompressionLevel(d.imgComp),
 		BufferPool: png.EncoderBufferPool(encBuf),
 	}
 
@@ -108,7 +128,7 @@ func (d *Daemon) screenCoder() {
 		var imgByte []byte
 			if d.pngcomp {
 				d.screenBuf.Reset()
-				encoder.Encode(&d.screenBuf, d.bot.GetLastScreencap())
+				d.encoder.Encode(&d.screenBuf, d.bot.GetLastScreencap())
 //				jpeg.Encode(&d.screenBuf, d.bot.GetLastScreencap(), option)
 				imgByte = cp(d.screenBuf.Bytes())
 				Vln(4, "[screen][encode]", time.Since(d.captime))

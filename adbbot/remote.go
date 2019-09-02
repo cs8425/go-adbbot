@@ -33,6 +33,8 @@ type RemoteBot struct {
 	decomp          *DiffImgDeComp
 	screenBuf       bytes.Buffer
 	pngcomp         bool
+	imgComp         int // Image Compress Level
+	encoder         *png.Encoder
 
 	KeyDelta  time.Duration
 
@@ -48,6 +50,7 @@ func NewRemoteBot(conn net.Conn, comp bool) (*RemoteBot, error) {
 	b := RemoteBot {
 		compress: comp,
 		pngcomp: false,
+		imgComp: -1,
 		conn: conn,
 		op: make(chan task, 4),
 		KeyDelta: 100 * time.Millisecond,
@@ -140,6 +143,22 @@ func (b *RemoteBot) TriggerScreencap() (err error) {
 	return
 }
 
+func (b *RemoteBot) ImgCompLv(lv int) {
+	switch lv {
+	case 0: // DefaultCompression
+	case -1: // NoCompression
+	case -2: // BestSpeed
+	case -3: // BestCompression
+	default:
+		lv = int(png.NoCompression)
+	}
+	b.imgComp = lv
+
+	if b.encoder != nil {
+		b.encoder.CompressionLevel = png.CompressionLevel(b.imgComp)
+	}
+}
+
 func (b *RemoteBot) PullScreenByte() ([]byte, error) {
 	b.capLock.Lock()
 	defer b.capLock.Unlock()
@@ -172,12 +191,13 @@ func (b *RemoteBot) PullScreenByte() ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		encoder := png.Encoder{
+		b.encoder = &png.Encoder{
 //			CompressionLevel: png.BestSpeed,
-			CompressionLevel: png.NoCompression,
+//			CompressionLevel: png.NoCompression,
+			CompressionLevel: png.CompressionLevel(b.imgComp),
 		}
 		b.screenBuf.Reset()
-		encoder.Encode(&b.screenBuf, img)
+		b.encoder.Encode(&b.screenBuf, img)
 		pngByte = cp(b.screenBuf.Bytes())
 	}
 
