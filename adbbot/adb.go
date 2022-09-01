@@ -151,17 +151,25 @@ func (b *LocalBot) TriggerScreencap() (err error) {
 
 	Vln(5, "screen", b.width, b.height, b.ScreenBounds, b.TargetScreen)
 
-	b.width = int(binary.LittleEndian.Uint32(screencap[0:4]))
-	b.height = int(binary.LittleEndian.Uint32(screencap[4:8]))
+	width := int(binary.LittleEndian.Uint32(screencap[0:4]))
+	height := int(binary.LittleEndian.Uint32(screencap[4:8]))
 
-	Vln(5, "height = ", b.height)
-	Vln(5, "width = ", b.width)
+	Vln(5, "height = ", height)
+	Vln(5, "width = ", width)
 	Vln(5, "length = ", len(screencap[12:]))
 	// Vln(5, "dump = ", screencap[12:52])
 
 	if b.ScreenBounds.Empty() {
 		b.ScreenBounds = image.Rectangle{image.Pt(0, 0), image.Pt(b.width, b.height)}
 		Vln(5, "set screen", b.width, b.height, b.ScreenBounds)
+	}
+
+	// for screen rotation change
+	if height != b.height || width != b.width {
+		b.width = width
+		b.height = height
+		b.ScreenBounds.Max.X = width
+		b.ScreenBounds.Max.X = height
 	}
 
 	img := &image.NRGBA{
@@ -171,8 +179,7 @@ func (b *LocalBot) TriggerScreencap() (err error) {
 	}
 
 	if b.scale != 1.0 {
-		screensize := b.ScreenBounds.Size()
-		newX := int(float64(screensize.X) * b.scale)
+		newX := int(float64(width) * b.scale)
 		// img = Resize(img, newX, 0, Lanczos)
 		// img = Resize(img, newX, 0, Box)
 		img = Resize(img, newX, 0, NearestNeighbor)
