@@ -8,7 +8,7 @@ import (
 	"runtime"
 	"time"
 
-	"../adbbot"
+	"local/adbbot"
 )
 
 var (

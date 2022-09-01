@@ -9,7 +9,7 @@ import (
 	"flag"
 	"log"
 
-	"../adbbot"
+	"local/adbbot"
 )
 
 var (

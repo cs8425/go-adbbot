@@ -18,9 +18,9 @@ import (
 
 	"image"
 
-	"../adbbot"
+	"local/adbbot"
 
-	"../3rd/websocket"
+	"github.com/gorilla/websocket"
 )
 
 var (

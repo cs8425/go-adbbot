@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"time"
 
-	ab "./adbbot"
+	ab "local/adbbot"
 )
 
 var (
