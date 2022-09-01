@@ -9,18 +9,20 @@ import (
 	"./adbbot"
 )
 
-var verbosity = flag.Int("v", 2, "verbosity")
-var ADB = flag.String("adb", "adb", "adb exec path")
-var DEV = flag.String("dev", "", "select device")
+var (
+	verbosity = flag.Int("v", 2, "verbosity")
+	ADB       = flag.String("adb", "adb", "adb exec path")
+	DEV       = flag.String("dev", "", "select device")
 
-var OnDevice = flag.Bool("od", true, "run on device")
+	OnDevice = flag.Bool("od", true, "run on device")
 
-var APP = flag.String("app", "com.android.vending", "app package name")
-var TMPL = flag.String("tmpl", "tmpl.png", "template image")
+	APP  = flag.String("app", "com.android.vending", "app package name")
+	TMPL = flag.String("tmpl", "tmpl.png", "template image")
+)
 
 func main() {
 
-	log.SetFlags(log.Ldate|log.Ltime)
+	log.SetFlags(log.Ldate | log.Ltime)
 	flag.Parse()
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
@@ -45,9 +47,8 @@ func main() {
 	// wait
 	time.Sleep(time.Millisecond * 10000)
 
-
 	// create matching region between Point <100,635> and <9999,9999>
-	//reg := bot.NewRectAbs(100, 635, 9999, 9999)
+	// reg := bot.NewRectAbs(100, 635, 9999, 9999)
 
 	// or All the screen (slow)
 	reg := bot.NewRectAll()
@@ -74,7 +75,7 @@ func main() {
 	if err != nil {
 		Vlogln(2, "SaveScreen err", err)
 	} else {
-		Vlogln(2, "SaveScreen as file ", infoname + ".png")
+		Vlogln(2, "SaveScreen as file ", infoname+".png")
 	}
 
 	// force-stop APP
@@ -87,4 +88,3 @@ func Vlogln(level int, v ...interface{}) {
 		log.Println(v...)
 	}
 }
-

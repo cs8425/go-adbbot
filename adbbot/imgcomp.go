@@ -3,12 +3,11 @@ package adbbot
 import (
 	"bytes"
 	"encoding/binary"
-	"io"
 	"image"
+	"io"
 
 	"github.com/golang/snappy"
 )
-
 
 func cp(a []byte) []byte {
 	b := make([]byte, len(a), len(a))
@@ -19,9 +18,9 @@ func cp(a []byte) []byte {
 type DiffImgComp struct {
 	buf *bytes.Buffer
 	ref *image.NRGBA
-	c int
-	N int
-	w *snappy.Writer
+	c   int
+	N   int
+	w   *snappy.Writer
 }
 
 func NewDiffImgComp(buf *bytes.Buffer, n int) *DiffImgComp {
@@ -129,28 +128,28 @@ func pFrame(img *image.NRGBA, refimg *image.NRGBA, buf io.Writer) {
 	_ = refimg.Pix[bound1:bound2]
 
 	over := make([]byte, 10, 10)
-	WriteVLen := func (conn io.Writer, n int64) {
+	WriteVLen := func(conn io.Writer, n int64) {
 		overlen := binary.PutVarint(over, int64(n))
 		conn.Write(over[:overlen])
 	}
 
-	tmp := make([]int16, dX * dY * 3, dX * dY * 3)
+	tmp := make([]int16, dX*dY*3, dX*dY*3)
 	for i := 0; i < dY; i++ {
 		for j := 0; j < dX; j++ {
 			oi := img.PixOffset(j, i)
 			si := refimg.PixOffset(j, i)
-			ti := (i * dX + j) * 3
+			ti := (i*dX + j) * 3
 
-			//r, g, b := int16(refimg.Pix[si + 0]) - int16(img.Pix[oi + 0]), int16(refimg.Pix[si + 1]) - int16(img.Pix[oi + 1]), int16(refimg.Pix[si + 2]) - int16(img.Pix[oi + 2])
-			//tmp[ti + 0], tmp[ti + 1], tmp[ti + 2] = r, g, b
+			// r, g, b := int16(refimg.Pix[si+0])-int16(img.Pix[oi+0]), int16(refimg.Pix[si+1])-int16(img.Pix[oi+1]), int16(refimg.Pix[si+2])-int16(img.Pix[oi+2])
+			// tmp[ti+0], tmp[ti+1], tmp[ti+2] = r, g, b
 
-			tmp[ti + 0] = int16(refimg.Pix[si + 0]) - int16(img.Pix[oi + 0])
-			tmp[ti + 1] = int16(refimg.Pix[si + 1]) - int16(img.Pix[oi + 1])
-			tmp[ti + 2] = int16(refimg.Pix[si + 2]) - int16(img.Pix[oi + 2])
+			tmp[ti+0] = int16(refimg.Pix[si+0]) - int16(img.Pix[oi+0])
+			tmp[ti+1] = int16(refimg.Pix[si+1]) - int16(img.Pix[oi+1])
+			tmp[ti+2] = int16(refimg.Pix[si+2]) - int16(img.Pix[oi+2])
 		}
 	}
 
-	tmp2 := make([]byte, dX * dY * 3 * 2, dX * dY * 3 * 2)
+	tmp2 := make([]byte, dX*dY*3*2, dX*dY*3*2)
 	offset := 0
 	for _, v := range tmp {
 		overlen := binary.PutVarint(tmp2[offset:], int64(v))
@@ -161,7 +160,7 @@ func pFrame(img *image.NRGBA, refimg *image.NRGBA, buf io.Writer) {
 	WriteVLen(buf, int64(dX))
 	WriteVLen(buf, int64(dY))
 	buf.Write(tmp2[:offset])
-//	Vln(6, "[DiffImg]P", len(img.Pix), dX, dY, len(tmp), offset, img.Stride, img.Rect, refimg.Stride, refimg.Rect)
+	// Vln(6, "[DiffImg]P", len(img.Pix), dX, dY, len(tmp), offset, img.Stride, img.Rect, refimg.Stride, refimg.Rect)
 }
 
 func iFrame(img *image.NRGBA, buf io.Writer) {
@@ -174,7 +173,7 @@ func iFrame(img *image.NRGBA, buf io.Writer) {
 	_ = img.Pix[bound1:bound2]
 
 	over := make([]byte, 10, 10)
-	WriteVLen := func (conn io.Writer, n int64) {
+	WriteVLen := func(conn io.Writer, n int64) {
 		overlen := binary.PutVarint(over, int64(n))
 		conn.Write(over[:overlen])
 	}
@@ -183,12 +182,12 @@ func iFrame(img *image.NRGBA, buf io.Writer) {
 	WriteVLen(buf, int64(dX))
 	WriteVLen(buf, int64(dY))
 
-	tmp := make([]byte, dX * dY * 3, dX * dY * 3)
+	tmp := make([]byte, dX*dY*3, dX*dY*3)
 	ti := 0
 	for i := 0; i < dY; i++ {
 		for j := 0; j < dX; j++ {
 			si := img.PixOffset(j, i)
-			tmp[ti + 0], tmp[ti + 1], tmp[ti + 2] = img.Pix[si + 0], img.Pix[si + 1], img.Pix[si + 2]
+			tmp[ti+0], tmp[ti+1], tmp[ti+2] = img.Pix[si+0], img.Pix[si+1], img.Pix[si+2]
 			ti += 3
 		}
 	}
@@ -198,15 +197,15 @@ func iFrame(img *image.NRGBA, buf io.Writer) {
 type DiffImgDeComp struct {
 	buf *bytes.Buffer
 	ref *image.NRGBA
-	r *snappy.Reader
-	//r io.Reader
+	r   *snappy.Reader
+	// r io.Reader
 }
 
 func NewDiffImgDeComp() *DiffImgDeComp {
 	o := &DiffImgDeComp{}
 	o.buf = bytes.NewBuffer(nil)
 	o.r = snappy.NewReader(o.buf)
-	//o.r = o.buf
+	// o.r = o.buf
 	return o
 }
 
@@ -232,19 +231,19 @@ func (o *DiffImgDeComp) decode(imgByte []byte, r io.Reader) (image.Image, error)
 		return nil, err
 	}
 
-//	Vln(4, "[DiffImgDeComp]Decode!", frameType[0], dX, dY)
+	// Vln(4, "[DiffImgDeComp]Decode!", frameType[0], dX, dY)
 	nrgba := image.NewNRGBA(image.Rect(0, 0, int(dX), int(dY)))
 	switch frameType[0] {
 	case 'R':
 		pxCount := dX * dY
-		_, err := io.ReadFull(r, nrgba.Pix[:pxCount * 3])
+		_, err := io.ReadFull(r, nrgba.Pix[:pxCount*3])
 		if err != nil {
 			return nil, err
 		}
 		iFrameParse(nrgba, int(dX), int(dY))
 
 	case 'P':
-//		Vln(5, "[DiffImgDeComp]P-buf", o.buf.Len())
+		// Vln(5, "[DiffImgDeComp]P-buf", o.buf.Len())
 		pFrameParse(r, nrgba, int(dX), int(dY), o.ref)
 	}
 
@@ -256,20 +255,20 @@ func iFrameParse(img *image.NRGBA, dX int, dY int) {
 	for i := int(dY - 1); i >= 0; i-- {
 		for j := int(dX - 1); j >= 0; j-- {
 			si := img.PixOffset(j, i)
-			ti := (i * dX + j) * 3
-			img.Pix[si + 0], img.Pix[si + 1], img.Pix[si + 2], img.Pix[si + 3] = img.Pix[ti + 0], img.Pix[ti + 1], img.Pix[ti + 2], 0xff
+			ti := (i*dX + j) * 3
+			img.Pix[si+0], img.Pix[si+1], img.Pix[si+2], img.Pix[si+3] = img.Pix[ti+0], img.Pix[ti+1], img.Pix[ti+2], 0xff
 		}
 	}
 }
 func pFrameParse(pixIn io.Reader, img *image.NRGBA, dX int, dY int, ref *image.NRGBA) {
 	reader := &byteReader{pixIn}
-	ReadVLen := func () (int, error){
+	ReadVLen := func() (int, error) {
 		t, err := binary.ReadVarint(reader)
 		return int(t), err
 	}
 
-	getRefPx := func (ri int) (int, int, int){
-		return int(ref.Pix[ri + 0]), int(ref.Pix[ri + 1]), int(ref.Pix[ri + 2])
+	getRefPx := func(ri int) (int, int, int) {
+		return int(ref.Pix[ri+0]), int(ref.Pix[ri+1]), int(ref.Pix[ri+2])
 	}
 
 	for i := 0; i < dY; i++ {
@@ -295,8 +294,7 @@ func pFrameParse(pixIn io.Reader, img *image.NRGBA, dX int, dY int, ref *image.N
 			}
 			b = b - t
 
-			img.Pix[si + 0], img.Pix[si + 1], img.Pix[si + 2], img.Pix[si + 3] = uint8(r), uint8(g), uint8(b), 0xff
+			img.Pix[si+0], img.Pix[si+1], img.Pix[si+2], img.Pix[si+3] = uint8(r), uint8(g), uint8(b), 0xff
 		}
 	}
 }
-

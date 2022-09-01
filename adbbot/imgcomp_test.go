@@ -3,9 +3,9 @@ package adbbot
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"image"
 	"io/ioutil"
-	"fmt"
 	"testing"
 )
 
@@ -127,4 +127,3 @@ func TestPFrame2(t *testing.T) {
 		}
 	}
 }
-

@@ -5,26 +5,26 @@ import (
 	"image"
 	"net"
 	"time"
-//	"strconv"
+	// "strconv"
 )
 
 type KeyAction int
 
 const (
-	KEY_UP      KeyAction = -1
-	KEY_MV      KeyAction =  0
-	KEY_DOWN    KeyAction =  1
+	KEY_UP   KeyAction = -1
+	KEY_MV   KeyAction = 0
+	KEY_DOWN KeyAction = 1
 )
 
-var actmap = map[KeyAction]string {
+var actmap = map[KeyAction]string{
 	-1: "up",
-	0: "move",
-	1: "down",
+	0:  "move",
+	1:  "down",
 }
 
 type Input interface {
 	Click(loc image.Point) (err error)
-	SwipeT(p0,p1 image.Point, time int) (err error)
+	SwipeT(p0, p1 image.Point, time int) (err error)
 
 	Touch(loc image.Point, ty KeyAction) (err error)
 	Key(in string, ty KeyAction) (err error)
@@ -32,34 +32,33 @@ type Input interface {
 	Text(in string) (err error)
 
 	Keyevent(in string) (err error)
-	KeyHome() (error)
-	KeyBack() (error)
-	KeySwitch() (error)
-	KeyPower() (error)
+	KeyHome() error
+	KeyBack() error
+	KeySwitch() error
+	KeyPower() error
 }
-
 
 // input by monkey
 // NOTE: "Accounts" in "Settings" will disappear!! You can NOT setup your accounts!! And can NOT set keyboard app!!
 type Monkey struct {
-	Port      int
-	KeyDelta  time.Duration
+	Port     int
+	KeyDelta time.Duration
 
-	bot       Bot
-	conn	  net.Conn
-	die       chan struct{}
-	started   chan struct{}
-	restart   chan struct{}
+	bot     Bot
+	conn    net.Conn
+	die     chan struct{}
+	started chan struct{}
+	restart chan struct{}
 }
 
-func NewMonkey(b *LocalBot, port int) (*Monkey) {
+func NewMonkey(b *LocalBot, port int) *Monkey {
 
 	m := Monkey{
-		Port: port,
+		Port:     port,
 		KeyDelta: 100 * time.Millisecond,
 
-		bot: b,
-		die: make(chan struct{}),
+		bot:     b,
+		die:     make(chan struct{}),
 		started: make(chan struct{}, 1),
 		restart: make(chan struct{}, 1),
 	}
@@ -109,7 +108,7 @@ func (m *Monkey) tryStart() bool {
 		return false
 	}
 	go cmd.Wait() // for zombie clean
-	//Vln(3, "[monkey][exit]")
+	// Vln(3, "[monkey][exit]")
 	return true
 }
 
@@ -186,16 +185,16 @@ func (m *Monkey) Key(in string, ty KeyAction) (err error) {
 
 func (m *Monkey) Click(loc image.Point) (err error) {
 	return m.Tap(loc)
-/*	err = m.Touch(loc, KEY_DOWN)
-	if err != nil {
-		return
-	}
-	time.Sleep(m.KeyDelta)
-	return m.Touch(loc, KEY_UP)*/
+	/*	err = m.Touch(loc, KEY_DOWN)
+		if err != nil {
+			return
+		}
+		time.Sleep(m.KeyDelta)
+		return m.Touch(loc, KEY_UP)*/
 }
 
 // blocking
-func (m *Monkey) SwipeT(p0,p1 image.Point, dtime int) (err error) {
+func (m *Monkey) SwipeT(p0, p1 image.Point, dtime int) (err error) {
 	if dtime <= 0 {
 		dtime = 300
 	}
@@ -208,12 +207,12 @@ func (m *Monkey) SwipeT(p0,p1 image.Point, dtime int) (err error) {
 	}
 
 	pt := image.Pt(0, 0)
-	pd := image.Pt(p1.X - p0.X, p1.Y - p0.Y)
+	pd := image.Pt(p1.X-p0.X, p1.Y-p0.Y)
 	esp := time.Since(start)
 	for esp < dur {
 		alpha := float64(esp) / float64(dur)
-		pt.X = p0.X + int(float64(pd.X) * alpha)
-		pt.Y = p0.Y + int(float64(pd.Y) * alpha)
+		pt.X = p0.X + int(float64(pd.X)*alpha)
+		pt.Y = p0.Y + int(float64(pd.Y)*alpha)
 
 		err = m.Touch(pt, KEY_MV)
 		if err != nil {
@@ -238,30 +237,29 @@ func (m *Monkey) Keyevent(in string) (err error) {
 	return m.Key(in, KEY_UP)
 }
 
-func (m *Monkey) KeyHome() (error) {
+func (m *Monkey) KeyHome() error {
 	return m.Keyevent("KEYCODE_HOME")
 }
 
-func (m *Monkey) KeyBack() (error) {
+func (m *Monkey) KeyBack() error {
 	return m.Keyevent("KEYCODE_BACK")
 }
 
-func (m *Monkey) KeySwitch() (error) {
+func (m *Monkey) KeySwitch() error {
 	return m.Keyevent("KEYCODE_APP_SWITCH")
 }
 
-func (m *Monkey) KeyPower() (error) {
+func (m *Monkey) KeyPower() error {
 	return m.Keyevent("KEYCODE_POWER")
 }
-
 
 // input by cmd command
 type CmdInput struct {
 	bot Bot
 }
 
-func NewCmdInput(b Bot) (*CmdInput) {
-	i := CmdInput {
+func NewCmdInput(b Bot) *CmdInput {
+	i := CmdInput{
 		bot: b,
 	}
 	return &i
@@ -271,11 +269,11 @@ func (i *CmdInput) Click(loc image.Point) (err error) {
 	loc = i.bot.Remap(loc)
 	str := fmt.Sprintf("input tap %d %d", loc.X, loc.Y)
 	_, err = i.bot.Shell(str)
-//	_, err = i.bot.Shell("input tap " + strconv.Itoa(loc.X) + " " + strconv.Itoa(loc.Y))
+	// _, err = i.bot.Shell("input tap " + strconv.Itoa(loc.X) + " " + strconv.Itoa(loc.Y))
 	return
 }
 
-func (i *CmdInput) SwipeT(p0,p1 image.Point, time int) (err error) {
+func (i *CmdInput) SwipeT(p0, p1 image.Point, time int) (err error) {
 	p0, p1 = i.bot.Remap(p0), i.bot.Remap(p1)
 	str := fmt.Sprintf("input swipe %d %d %d %d %d", p0.X, p0.Y, p1.X, p1.Y, time)
 	_, err = i.bot.Shell(str)
@@ -301,20 +299,18 @@ func (i *CmdInput) Keyevent(in string) (err error) {
 	return
 }
 
-func (i *CmdInput) KeyHome() (error) {
+func (i *CmdInput) KeyHome() error {
 	return i.bot.Keyevent("KEYCODE_HOME")
 }
 
-func (i *CmdInput) KeyBack() (error) {
+func (i *CmdInput) KeyBack() error {
 	return i.bot.Keyevent("KEYCODE_BACK")
 }
 
-func (i *CmdInput) KeySwitch() (error) {
+func (i *CmdInput) KeySwitch() error {
 	return i.bot.Keyevent("KEYCODE_APP_SWITCH")
 }
 
-func (i *CmdInput) KeyPower() (error) {
+func (i *CmdInput) KeyPower() error {
 	return i.bot.Keyevent("KEYCODE_POWER")
 }
-
-

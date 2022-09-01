@@ -2,31 +2,33 @@
 package main
 
 import (
-	"net"
 	"flag"
 	"log"
+	"net"
 	"runtime"
 	"time"
 
 	"../adbbot"
 )
 
-var verbosity = flag.Int("v", 3, "verbosity")
-var ADB = flag.String("adb", "adb", "adb exec path")
-var DEV = flag.String("dev", "", "select device")
+var (
+	verbosity = flag.Int("v", 3, "verbosity")
+	ADB       = flag.String("adb", "adb", "adb exec path")
+	DEV       = flag.String("dev", "", "select device")
 
-var OnDevice = flag.Bool("od", false, "run on device")
-var compress = flag.Bool("comp", false, "compress connection")
+	OnDevice = flag.Bool("od", false, "run on device")
+	compress = flag.Bool("comp", false, "compress connection")
 
-var bindAddr = flag.String("l", ":6900", "")
+	bindAddr = flag.String("l", ":6900", "")
 
-var reflash = flag.Int("r", 1000, "update screen minimum time (ms)")
+	reflash = flag.Int("r", 1000, "update screen minimum time (ms)")
 
-var scale = flag.Float64("scale", 1.0, "screen resize after capture")
+	scale = flag.Float64("scale", 1.0, "screen resize after capture")
+)
 
 func main() {
 
-	log.SetFlags(log.Ldate|log.Ltime)
+	log.SetFlags(log.Ldate | log.Ltime)
 	flag.Parse()
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
@@ -56,7 +58,7 @@ func main() {
 	}
 	Vln(1, "daemon start at", *bindAddr)
 
-//	go screencap(bot)
+	// go screencap(bot)
 
 	daemon, err := adbbot.NewDaemon(ln, bot, *compress)
 	if err != nil {
@@ -89,4 +91,3 @@ func Vln(level int, v ...interface{}) {
 		log.Println(v...)
 	}
 }
-

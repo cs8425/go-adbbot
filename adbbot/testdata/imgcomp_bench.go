@@ -17,6 +17,7 @@ import (
 	. ".."
 
 	"compress/flate"
+
 	"github.com/golang/snappy"
 )
 
@@ -156,7 +157,7 @@ func code2OnlyIC(queue chan []byte) {
 	return
 }
 
-func testPipeByte(fn (func (chan []byte) ()), b io.Writer) {
+func testPipeByte(fn func(chan []byte), b io.Writer) {
 	ch := make(chan []byte)
 	go fn(ch)
 	for imgByte := range ch {
@@ -164,7 +165,7 @@ func testPipeByte(fn (func (chan []byte) ()), b io.Writer) {
 	}
 }
 
-func getOutput(benchFunc (func (chan []byte)), pipeFunc (func(io.Writer)(io.Writer))) []byte {
+func getOutput(benchFunc func(chan []byte), pipeFunc func(io.Writer) io.Writer) []byte {
 	buf := bytes.NewBuffer(nil)
 	conn := pipeFunc(buf)
 	buf.Reset()
@@ -176,8 +177,8 @@ func getFunctionName(i interface{}) string {
 	return runtime.FuncForPC(reflect.ValueOf(i).Pointer()).Name()
 }
 
-func runBench(benchFunc (func (chan []byte)), pipeFunc (func(io.Writer)(io.Writer))) {
-	fn := func (b *testing.B) {
+func runBench(benchFunc func(chan []byte), pipeFunc func(io.Writer) io.Writer) {
+	fn := func(b *testing.B) {
 		buf := bytes.NewBuffer(nil)
 		conn := pipeFunc(buf)
 		for n := 0; n < b.N; n++ {
@@ -186,7 +187,7 @@ func runBench(benchFunc (func (chan []byte)), pipeFunc (func(io.Writer)(io.Write
 		}
 	}
 
-	fnSize := func () int {
+	fnSize := func() int {
 		buf := bytes.NewBuffer(nil)
 		conn := pipeFunc(buf)
 		buf.Reset()
@@ -216,7 +217,6 @@ func main() {
 	runBench(code2PngBestSpeed, nopStream)
 	runBench(code2PngNoCompression, nopStream)
 
-
 	println("-- snappy Stream --")
 	runBench(code2Diff, newSnappyStream)
 	runBench(code2DiffC, newSnappyStream)
@@ -224,10 +224,9 @@ func main() {
 	runBench(code2OnlyIC, newSnappyStream)
 
 	runBench(code2Jpg, newSnappyStream)
-//	runBench(code2Png, newSnappyStream)
+	// runBench(code2Png, newSnappyStream)
 	runBench(code2PngBestSpeed, newSnappyStream)
 	runBench(code2PngNoCompression, newSnappyStream)
-
 
 	println("-- flate Stream --")
 	runBench(code2Diff, newFlateStream)
@@ -247,21 +246,21 @@ func Vsize(bytes int) (ret string) {
 	var s string = " "
 
 	switch {
-	case bytes < (2<<9):
+	case bytes < (2 << 9):
 
-	case bytes < (2<<19):
+	case bytes < (2 << 19):
 		tmp = tmp / float64(2<<9)
 		s = "K"
 
-	case bytes < (2<<29):
+	case bytes < (2 << 29):
 		tmp = tmp / float64(2<<19)
 		s = "M"
 
-	case bytes < (2<<39):
+	case bytes < (2 << 39):
 		tmp = tmp / float64(2<<29)
 		s = "G"
 
-	case bytes < (2<<49):
+	case bytes < (2 << 49):
 		tmp = tmp / float64(2<<39)
 		s = "T"
 
@@ -277,6 +276,7 @@ func nopStream(conn io.Writer) io.Writer {
 type snappyStream struct {
 	w *snappy.Writer
 }
+
 func (c *snappyStream) Write(p []byte) (n int, err error) {
 	n, err = c.w.Write(p)
 	err = c.w.Flush()
@@ -287,10 +287,10 @@ func newSnappyStream(conn io.Writer) io.Writer {
 	return c
 }
 
-
 type flateStream struct {
-	w    *flate.Writer
+	w *flate.Writer
 }
+
 func (c *flateStream) Write(p []byte) (n int, err error) {
 	n, err = c.w.Write(p)
 	err = c.w.Flush()
@@ -299,7 +299,6 @@ func (c *flateStream) Write(p []byte) (n int, err error) {
 func newFlateStream(conn io.Writer) io.Writer {
 	c := &flateStream{}
 	c.w, _ = flate.NewWriter(conn, flate.BestSpeed)
-	//c.w, _ = flate.NewWriter(conn, flate.HuffmanOnly)
+	// c.w, _ = flate.NewWriter(conn, flate.HuffmanOnly)
 	return c
 }
-

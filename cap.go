@@ -9,17 +9,19 @@ import (
 	"./adbbot"
 )
 
-var verbosity = flag.Int("v", 3, "verbosity")
-var ADB = flag.String("adb", "adb", "adb exec path")
-var DEV = flag.String("dev", "", "select device")
+var (
+	verbosity = flag.Int("v", 3, "verbosity")
+	ADB       = flag.String("adb", "adb", "adb exec path")
+	DEV       = flag.String("dev", "", "select device")
 
-var OUT = flag.String("o", "", "output")
+	OUT = flag.String("o", "", "output")
 
-var OnDevice = flag.Bool("od", false, "run on device")
+	OnDevice = flag.Bool("od", false, "run on device")
+)
 
 func main() {
 
-	log.SetFlags(log.Ldate|log.Ltime)
+	log.SetFlags(log.Ldate | log.Ltime)
 	flag.Parse()
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
@@ -47,33 +49,33 @@ func main() {
 	if err != nil {
 		Vlogln(3, "SaveScreen err", err)
 	}
-/*	img, _ := bot.Screencap()
-//	img = img.(*image.NRGBA).SubImage(bot.NewRect(0, 180, 448, 95))
-	img = img.(*image.NRGBA).SubImage(bot.NewRect(0, 0, 448, 275))
-	err := adbbot.SaveImage(img, capfile)
-	if err != nil {
-		Vlogln(3, "SaveScreen err", err)
-		return false
-	}*/
+
+	// img, _ := bot.Screencap()
+	// img = img.(*image.NRGBA).SubImage(bot.NewRect(0, 180, 448, 95))
+	// img = img.(*image.NRGBA).SubImage(bot.NewRect(0, 0, 448, 275))
+	// err := adbbot.SaveImage(img, capfile)
+	// if err != nil {
+	// 	Vlogln(3, "SaveScreen err", err)
+	// 	return
+	// }
 
 }
 
 func Vlogf(level int, format string, v ...interface{}) {
 	if level <= *verbosity {
 		log.Printf(format, v...)
-//		fmt.Printf(format, v...)
+		// fmt.Printf(format, v...)
 	}
 }
 func Vlog(level int, v ...interface{}) {
 	if level <= *verbosity {
 		log.Print(v...)
-//		fmt.Print(v...)
+		// fmt.Print(v...)
 	}
 }
 func Vlogln(level int, v ...interface{}) {
 	if level <= *verbosity {
 		log.Println(v...)
-//		fmt.Println(v...)
+		// fmt.Println(v...)
 	}
 }
-

@@ -297,7 +297,6 @@ func Fit(img image.Image, width, height int, filter ResampleFilter) *image.NRGBA
 	return Resize(img, newW, newH, filter)
 }
 
-
 // ResampleFilter is a resampling filter struct. It can be used to define custom filters.
 //
 // Supported resample filters: NearestNeighbor, Box, Linear, Hermite, MitchellNetravali,
@@ -556,4 +555,3 @@ func init() {
 		},
 	}
 }
-

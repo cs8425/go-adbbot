@@ -79,5 +79,3 @@ func BenchmarkFindP(b *testing.B) {
 		}
 	}
 }
-
-

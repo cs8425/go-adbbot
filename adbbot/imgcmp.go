@@ -2,15 +2,15 @@ package adbbot
 
 import (
 	"image"
+	"math"
 	"sync/atomic"
 	"time"
-	"math"
 )
 
-func abs(a, b uint8) (int64) {
-/*	c := int64(a) - int64(b)
-	y := c >> 63
-	return (c ^ y) - y*/
+func abs(a, b uint8) int64 {
+	// c := int64(a) - int64(b)
+	// y := c >> 63
+	// return (c ^ y) - y
 
 	c := int(a) - int(b)
 	return int64(c * c)
@@ -26,9 +26,9 @@ func FindExistReg(b Bot, tmpl *Tmpl, times int, delay int) (x int, y int, val fl
 		}
 
 		Vln(5, "FindP()", i)
-//		timeStart()
+		// timeStart()
 		x, y, val = FindInTmpl(img, tmpl)
-//		timeEnd("FindP()")
+		// timeEnd("FindP()")
 		if x != -1 && y != -1 {
 			Vln(4, "FindExistP()", x, y, val)
 			return
@@ -57,14 +57,14 @@ func FindInTmpl(img image.Image, tmpl *Tmpl) (x int, y int, val float64) {
 	}
 
 	Vln(5, "FindInTmpl()", tmpl)
-//	timeStart()
+	// timeStart()
 	x, y, val = FindP(img, tmpl.Image)
-//	timeEnd("FindInTmpl()")
+	// timeEnd("FindInTmpl()")
 	Vln(4, "FindInTmpl()", x, y, val)
 	return
 }
 
-func FindExistImg(b Bot, subimg image.Image, times int, delay int) (x int, y int, val float64){
+func FindExistImg(b Bot, subimg image.Image, times int, delay int) (x int, y int, val float64) {
 
 	for i := 0; i < times; i++ {
 		Vln(5, "Screencap()", i)
@@ -74,9 +74,9 @@ func FindExistImg(b Bot, subimg image.Image, times int, delay int) (x int, y int
 		}
 
 		Vln(5, "FindP()", i)
-//		timeStart()
+		// timeStart()
 		x, y, val = FindP(img, subimg)
-//		timeEnd("FindP()")
+		// timeEnd("FindP()")
 		if x != -1 && y != -1 {
 			Vln(4, "FindExistP()", x, y, val)
 			return
@@ -101,8 +101,8 @@ func FindP(img image.Image, subimg image.Image) (x int, y int, val float64) {
 	startY := img.Bounds().Min.Y
 	endY := img.Bounds().Max.Y - subimg.Bounds().Dy()
 
-	var min int64 = int64(subimg.Bounds().Dx() * subimg.Bounds().Dy() * 255 * 255 * 3) / 32
-//	var min int64 = 0x7fffffffffffffff
+	var min int64 = int64(subimg.Bounds().Dx()*subimg.Bounds().Dy()*255*255*3) / 32
+	// var min int64 = 0x7fffffffffffffff
 
 	Vln(5, "Find @ = ", startX, endX, startY, endY)
 
@@ -118,7 +118,7 @@ func FindP(img image.Image, subimg image.Image) (x int, y int, val float64) {
 			reduceCh := make(chan cmpRet, 8)
 			go func() {
 				for {
-					ret, ok := <- reduceCh
+					ret, ok := <-reduceCh
 					if !ok {
 						return
 					}
@@ -137,7 +137,7 @@ func FindP(img image.Image, subimg image.Image) (x int, y int, val float64) {
 						localMin := atomic.LoadInt64(&min)
 						tmp := CmpAt(nrgba, snrgba, j, y, localMin)
 						if tmp < localMin {
-							reduceCh <- cmpRet {
+							reduceCh <- cmpRet{
 								X: j,
 								Y: y,
 								V: tmp,
@@ -145,7 +145,7 @@ func FindP(img image.Image, subimg image.Image) (x int, y int, val float64) {
 						}
 					}
 				}
-//				Vln(2, "min, x, y = ", min, x, y)
+				// Vln(2, "min, x, y = ", min, x, y)
 			})
 			wg.Wait()
 			close(reduceCh)
@@ -171,8 +171,8 @@ func Find(img image.Image, subimg image.Image) (x int, y int, val float64) {
 	startY := img.Bounds().Min.Y
 	endY := img.Bounds().Max.Y - subimg.Bounds().Dy()
 
-	var min int64 = int64(subimg.Bounds().Dx() * subimg.Bounds().Dy() * 255 * 255 * 3) / 32
-//	var min int64 = 0x7fffffffffffffff
+	var min int64 = int64(subimg.Bounds().Dx()*subimg.Bounds().Dy()*255*255*3) / 32
+	// var min int64 = 0x7fffffffffffffff
 
 	Vln(4, "Find @ = ", startX, endX, startY, endY)
 
@@ -201,7 +201,7 @@ func Find(img image.Image, subimg image.Image) (x int, y int, val float64) {
 	return x, y, val
 }
 
-func CmpAt(img *image.NRGBA, subimg *image.NRGBA, offX int, offY int, limit int64) (int64) {
+func CmpAt(img *image.NRGBA, subimg *image.NRGBA, offX int, offY int, limit int64) int64 {
 
 	if limit <= 0 {
 		return 0
@@ -210,20 +210,20 @@ func CmpAt(img *image.NRGBA, subimg *image.NRGBA, offX int, offY int, limit int6
 	var diff int64 = 0
 
 	dX := subimg.Bounds().Dx()
-	if offX + dX > img.Bounds().Max.X {
+	if offX+dX > img.Bounds().Max.X {
 		dX = img.Bounds().Max.X
 		return limit
 	}
 
 	dY := subimg.Bounds().Dy()
-	if offY + dY > img.Bounds().Max.Y {
+	if offY+dY > img.Bounds().Max.Y {
 		dY = img.Bounds().Max.Y
 		return limit
 	}
 
 	// BCE
 	bound1 := img.PixOffset(offX, offY)
-	bound2 := img.PixOffset(dX + offX, dY + offY) + 3
+	bound2 := img.PixOffset(dX+offX, dY+offY) + 3
 	_ = img.Pix[bound1:bound2]
 
 	bound1 = subimg.PixOffset(0, 0)
@@ -234,17 +234,17 @@ func CmpAt(img *image.NRGBA, subimg *image.NRGBA, offX int, offY int, limit int6
 	for i := 0; i < dY; i++ {
 		for j := 0; j < dX; j++ {
 
-			oi := img.PixOffset(j + offX, i + offY)
+			oi := img.PixOffset(j+offX, i+offY)
 			si := subimg.PixOffset(j, i)
 
-			if subimg.Pix[si + 3] == 0 { // alpha = 0 >> transparent, skip calculate
+			if subimg.Pix[si+3] == 0 { // alpha = 0 >> transparent, skip calculate
 				continue
 			}
 
-			diff += abs(img.Pix[oi + 0], subimg.Pix[si + 0])
-			diff += abs(img.Pix[oi + 1], subimg.Pix[si + 1])
-			diff += abs(img.Pix[oi + 2], subimg.Pix[si + 2])
-			//diff += abs(img.Pix[oi + 3], subimg.Pix[si + 3])
+			diff += abs(img.Pix[oi+0], subimg.Pix[si+0])
+			diff += abs(img.Pix[oi+1], subimg.Pix[si+1])
+			diff += abs(img.Pix[oi+2], subimg.Pix[si+2])
+			// diff += abs(img.Pix[oi + 3], subimg.Pix[si + 3])
 
 			if diff > limit {
 				goto END
@@ -252,12 +252,11 @@ func CmpAt(img *image.NRGBA, subimg *image.NRGBA, offX int, offY int, limit int6
 		}
 	}
 
-
 END:
 	return diff
 }
 
-func calcVal(img image.Image, diff int64) (float64) {
+func calcVal(img image.Image, diff int64) float64 {
 	var alpha int64 = 0
 
 	subimg, ok := img.(*image.NRGBA)
@@ -279,8 +278,8 @@ func calcVal(img image.Image, diff int64) (float64) {
 		for j := startX; j < endX; j++ {
 			si := subimg.PixOffset(j, i)
 			// alpha = 0 >> transparent, skip calculate
-//			alpha += int64(subimg.Pix[si + 3])
-			a := int64(subimg.Pix[si + 3])
+			// alpha += int64(subimg.Pix[si + 3])
+			a := int64(subimg.Pix[si+3])
 			alpha += a * a
 		}
 	}
@@ -289,13 +288,12 @@ func calcVal(img image.Image, diff int64) (float64) {
 		return 1
 	}
 
-//	val := float64(diff) / float64(alpha * 3)
-//	val = 1 - val
-	val := float64(diff) / float64(alpha * 3)
+	// val := float64(diff) / float64(alpha * 3)
+	// val = 1 - val
+	val := float64(diff) / float64(alpha*3)
 	val = 1 - math.Sqrt(val)
 
 	Vln(4, "calcVal()", diff, val, alpha, subimg.Bounds().Dx()*subimg.Bounds().Dy())
 
 	return val
 }
-

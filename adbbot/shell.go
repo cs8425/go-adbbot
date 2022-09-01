@@ -3,8 +3,8 @@ package adbbot
 import (
 	"log"
 	"os/exec"
-	"sync"
 	"strings"
+	"sync"
 )
 
 var Verbosity = 3
@@ -16,7 +16,7 @@ func Cmd(cmd string) ([]byte, error) {
 	head := parts[0]
 	parts = parts[1:len(parts)]
 
-	return exec.Command(head,parts...).Output()
+	return exec.Command(head, parts...).Output()
 }
 
 func CmdArg(cmd ...string) ([]byte, error) {
@@ -54,19 +54,18 @@ func cmd_wg(cmd string, wg *sync.WaitGroup) {
 func Vf(level int, format string, v ...interface{}) {
 	if level <= Verbosity {
 		log.Printf(format, v...)
-//		fmt.Printf(format, v...)
+		// fmt.Printf(format, v...)
 	}
 }
 func V(level int, v ...interface{}) {
 	if level <= Verbosity {
 		log.Print(v...)
-//		fmt.Print(v...)
+		// fmt.Print(v...)
 	}
 }
 func Vln(level int, v ...interface{}) {
 	if level <= Verbosity {
 		log.Println(v...)
-//		fmt.Println(v...)
+		// fmt.Println(v...)
 	}
 }
-

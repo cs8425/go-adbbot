@@ -6,24 +6,25 @@ import (
 	"net"
 	"os"
 
-	"log"
 	"flag"
+	"log"
 
 	"../adbbot"
 )
 
-var daemonAddr = flag.String("t", "127.0.0.1:6900", "")
+var (
+	daemonAddr = flag.String("t", "127.0.0.1:6900", "")
 
-var compress = flag.Bool("comp", false, "compress connection")
+	compress = flag.Bool("comp", false, "compress connection")
 
-var reflash = flag.Int("r", 1000, "update screen minimum time (ms)")
+	reflash = flag.Int("r", 1000, "update screen minimum time (ms)")
 
-var verbosity = flag.Int("v", 3, "verbosity")
+	verbosity = flag.Int("v", 3, "verbosity")
+)
 
 func main() {
-	log.SetFlags(log.Ldate|log.Ltime)
+	log.SetFlags(log.Ldate | log.Ltime)
 	flag.Parse()
-
 
 	conn, err := net.Dial("tcp", *daemonAddr)
 	if err != nil {
@@ -33,7 +34,7 @@ func main() {
 	Vln(1, "connct", *daemonAddr, "ok!")
 
 	if *compress {
-		//conn = adbbot.NewFlateStream(conn, 1)
+		// conn = adbbot.NewFlateStream(conn, 1)
 		conn = adbbot.NewCompStream(conn, 1)
 	}
 
@@ -44,7 +45,7 @@ func main() {
 	}
 
 	Cp3(os.Stdin, conn, os.Stdout)
-	
+
 }
 
 // p1 >> p0 >> p2
@@ -73,5 +74,3 @@ func Vln(level int, v ...interface{}) {
 		log.Println(v...)
 	}
 }
-
-

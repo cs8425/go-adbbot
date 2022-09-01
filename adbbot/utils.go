@@ -18,62 +18,58 @@ import (
 var timeT0 time.Time
 
 type Tmpl struct {
-	Image      image.Image
-	Region     image.Rectangle
-	ImagePath  string
+	Image     image.Image
+	Region    image.Rectangle
+	ImagePath string
 }
 
 var RectAll = image.ZR
 
-func timeStart() (){
+func timeStart() {
 	timeT0 = time.Now()
 }
 
-func timeEnd(info string) (){
-	Vf(4, info + " took %s", time.Since(timeT0))
+func timeEnd(info string) {
+	Vf(4, info+" took %s", time.Since(timeT0))
 }
 
 func NewTmpl(filename string, reg image.Rectangle) (*Tmpl, error) {
 
-	img, err:= OpenImage(filename)
+	img, err := OpenImage(filename)
 	if err != nil {
 		return nil, err
 	}
 
 	tmpl := Tmpl{
-		Image:      img,
-		Region:     reg,
-		ImagePath:  filename,
+		Image:     img,
+		Region:    reg,
+		ImagePath: filename,
 	}
 
 	return &tmpl, nil
 }
 
-func LoadTmpl(filename string, reg image.Rectangle) (*Tmpl) {
+func LoadTmpl(filename string, reg image.Rectangle) *Tmpl {
 	tmpl, _ := NewTmpl(filename, reg)
 	return tmpl
 }
 
-func (t *Tmpl) Center(x, y int) (image.Point) {
+func (t *Tmpl) Center(x, y int) image.Point {
 
 	bb := t.Image.Bounds()
-	x = bb.Dx() / 2 + x
-	y = bb.Dy() / 2 + y
+	x = bb.Dx()/2 + x
+	y = bb.Dy()/2 + y
 
 	return image.Pt(x, y)
 }
 
-
-func Rect(x, y, xp, yp int) (image.Rectangle){
+func Rect(x, y, xp, yp int) image.Rectangle {
 	return image.Rect(x, y, x+xp, y+yp)
 }
 
-func RectAbs(x, y, x2, y2 int) (image.Rectangle){
+func RectAbs(x, y, x2, y2 int) image.Rectangle {
 	return image.Rect(x, y, x2, y2)
 }
-
-
-
 
 // belows are copy and modify form Grigory Dryapak's Imaging
 // https://github.com/disintegration/imaging
@@ -111,7 +107,6 @@ const (
 var (
 	ErrUnsupportedFormat = errors.New("imaging: unsupported image format")
 )
-
 
 // Open loads an image from file
 func OpenImage(filename string) (image.Image, error) {
@@ -226,7 +221,7 @@ func parallel(start, stop int, fn func(<-chan int)) {
 	}
 }
 
-func parallelSpawn(start, stop int, fn func(<-chan int)) (*sync.WaitGroup) {
+func parallelSpawn(start, stop int, fn func(<-chan int)) *sync.WaitGroup {
 	var wg sync.WaitGroup
 
 	count := stop - start
@@ -238,7 +233,6 @@ func parallelSpawn(start, stop int, fn func(<-chan int)) (*sync.WaitGroup) {
 	if procs > count {
 		procs = count
 	}
-
 
 	c := make(chan int, procs)
 	wg.Add(1)
@@ -259,4 +253,3 @@ func parallelSpawn(start, stop int, fn func(<-chan int)) (*sync.WaitGroup) {
 	}
 	return &wg
 }
-

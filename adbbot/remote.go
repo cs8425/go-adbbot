@@ -12,47 +12,46 @@ import (
 )
 
 type task struct {
-	Type      int
-	Op        string
-	X0        int
-	Y0        int
-	Ev        KeyAction
+	Type int
+	Op   string
+	X0   int
+	Y0   int
+	Ev   KeyAction
 }
 
 type RemoteBot struct {
+	ScreenBounds  image.Rectangle
+	lastScreencap image.Image
+	capLock       sync.Mutex
 
-	ScreenBounds    image.Rectangle
-	lastScreencap   image.Image
-	capLock         sync.Mutex
+	conn net.Conn // cmd
 
-	conn            net.Conn // cmd
+	FindOnDaemon bool // TODO
+	compress     bool
+	op           chan task
+	decomp       *DiffImgDeComp
+	screenBuf    bytes.Buffer
+	pngcomp      bool
+	imgComp      int // Image Compress Level
+	encoder      *png.Encoder
 
-	FindOnDaemon    bool // TODO
-	compress        bool
-	op              chan task
-	decomp          *DiffImgDeComp
-	screenBuf       bytes.Buffer
-	pngcomp         bool
-	imgComp         int // Image Compress Level
-	encoder         *png.Encoder
-
-	KeyDelta  time.Duration
+	KeyDelta time.Duration
 
 	Input
 }
 
 func NewRemoteBot(conn net.Conn, comp bool) (*RemoteBot, error) {
 	if comp {
-		//conn = NewFlateStream(conn, 1)
+		// conn = NewFlateStream(conn, 1)
 		conn = NewCompStream(conn, 1)
 	}
 
-	b := RemoteBot {
+	b := RemoteBot{
 		compress: comp,
-		pngcomp: false,
-		imgComp: -1,
-		conn: conn,
-		op: make(chan task, 4),
+		pngcomp:  false,
+		imgComp:  -1,
+		conn:     conn,
+		op:       make(chan task, 4),
 		KeyDelta: 100 * time.Millisecond,
 	}
 
@@ -69,7 +68,7 @@ func (b *RemoteBot) pushworker() {
 	var err error
 
 	for {
-		todo := <- b.op
+		todo := <-b.op
 
 		switch todo.Type {
 		case OP_TOUCH:
@@ -118,13 +117,12 @@ func (b *RemoteBot) pushworker() {
 	}
 }
 
-
 func (b *RemoteBot) Adb(parts string) ([]byte, error) { return []byte{}, ErrNotSupport } // nop
 
 func (b *RemoteBot) Shell(parts string) ([]byte, error) {
-	t := task {
+	t := task{
 		Type: OP_CMD,
-		Op: parts,
+		Op:   parts,
 	}
 	b.op <- t
 	return []byte{}, nil
@@ -136,7 +134,7 @@ func (b *RemoteBot) ShellPipe(p1 io.ReadWriteCloser, cmds string, blocking bool)
 }
 
 func (b *RemoteBot) TriggerScreencap() (err error) {
-	t := task {
+	t := task{
 		Type: OP_CAP,
 	}
 	b.op <- t
@@ -163,7 +161,7 @@ func (b *RemoteBot) PullScreenByte() ([]byte, error) {
 	b.capLock.Lock()
 	defer b.capLock.Unlock()
 
-	t := task {
+	t := task{
 		Type: OP_PULL,
 	}
 	b.op <- t
@@ -192,8 +190,8 @@ func (b *RemoteBot) PullScreenByte() ([]byte, error) {
 			return nil, err
 		}
 		b.encoder = &png.Encoder{
-//			CompressionLevel: png.BestSpeed,
-//			CompressionLevel: png.NoCompression,
+			// CompressionLevel: png.BestSpeed,
+			// CompressionLevel: png.NoCompression,
 			CompressionLevel: png.CompressionLevel(b.imgComp),
 		}
 		b.screenBuf.Reset()
@@ -224,7 +222,7 @@ func (b *RemoteBot) Screencap() (img image.Image, err error) {
 	return b.lastScreencap, err
 }
 
-func (b *RemoteBot) GetLastScreencap() (image.Image) {
+func (b *RemoteBot) GetLastScreencap() image.Image {
 	return b.lastScreencap
 }
 
@@ -247,10 +245,9 @@ func (b *RemoteBot) KillApp(app string) (err error) {
 	return
 }
 
-func (b *RemoteBot) Remap(loc image.Point) (image.Point) {
+func (b *RemoteBot) Remap(loc image.Point) image.Point {
 	return loc
 }
-
 
 // inputs
 func (b *RemoteBot) Tap(loc image.Point) (err error) {
@@ -258,9 +255,9 @@ func (b *RemoteBot) Tap(loc image.Point) (err error) {
 }
 
 func (b *RemoteBot) Text(in string) (err error) {
-	t := task {
+	t := task{
 		Type: OP_TEXT,
-		Op: in,
+		Op:   in,
 	}
 	Vln(4, "[text]", t)
 	b.op <- t
@@ -272,11 +269,11 @@ func (b *RemoteBot) Press(in string) (err error) {
 }
 
 func (b *RemoteBot) Touch(loc image.Point, ty KeyAction) (err error) {
-	t := task {
+	t := task{
 		Type: OP_TOUCH,
-		X0: loc.X,
-		Y0: loc.Y,
-		Ev: ty,
+		X0:   loc.X,
+		Y0:   loc.Y,
+		Ev:   ty,
 	}
 	Vln(4, "[key]", t)
 	b.op <- t
@@ -284,10 +281,10 @@ func (b *RemoteBot) Touch(loc image.Point, ty KeyAction) (err error) {
 }
 
 func (b *RemoteBot) Key(in string, ty KeyAction) (err error) {
-	t := task {
+	t := task{
 		Type: OP_KEY,
-		Op: in,
-		Ev: ty,
+		Op:   in,
+		Ev:   ty,
 	}
 	Vln(4, "[key]", t)
 	b.op <- t
@@ -303,7 +300,7 @@ func (b *RemoteBot) Click(loc image.Point) (err error) {
 	return b.Touch(loc, KEY_UP)
 }
 
-func (b *RemoteBot) SwipeT(p0,p1 image.Point, dtime int) (err error) {
+func (b *RemoteBot) SwipeT(p0, p1 image.Point, dtime int) (err error) {
 	if dtime <= 0 {
 		dtime = 300
 	}
@@ -316,12 +313,12 @@ func (b *RemoteBot) SwipeT(p0,p1 image.Point, dtime int) (err error) {
 	}
 
 	pt := image.Pt(0, 0)
-	pd := image.Pt(p1.X - p0.X, p1.Y - p0.Y)
+	pd := image.Pt(p1.X-p0.X, p1.Y-p0.Y)
 	esp := time.Since(start)
 	for esp < dur {
 		alpha := float64(esp) / float64(dur)
-		pt.X = p0.X + int(float64(pd.X) * alpha)
-		pt.Y = p0.Y + int(float64(pd.Y) * alpha)
+		pt.X = p0.X + int(float64(pd.X)*alpha)
+		pt.Y = p0.Y + int(float64(pd.Y)*alpha)
 
 		err = b.Touch(pt, KEY_MV)
 		if err != nil {
@@ -345,20 +342,18 @@ func (b *RemoteBot) Keyevent(in string) (err error) {
 	return b.Key(in, KEY_UP)
 }
 
-func (b *RemoteBot) KeyHome() (error) {
+func (b *RemoteBot) KeyHome() error {
 	return b.Keyevent("KEYCODE_HOME")
 }
 
-func (b *RemoteBot) KeyBack() (error) {
+func (b *RemoteBot) KeyBack() error {
 	return b.Keyevent("KEYCODE_BACK")
 }
 
-func (b *RemoteBot) KeySwitch() (error) {
+func (b *RemoteBot) KeySwitch() error {
 	return b.Keyevent("KEYCODE_APP_SWITCH")
 }
 
-func (b *RemoteBot) KeyPower() (error) {
+func (b *RemoteBot) KeyPower() error {
 	return b.Keyevent("KEYCODE_POWER")
 }
-
-

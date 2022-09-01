@@ -7,40 +7,43 @@ import (
 	"net/http"
 	"sync/atomic"
 
+	"flag"
 	"log"
 	"runtime"
 	"time"
-	"flag"
 
-//	"fmt"
+	// "fmt"
 	"strconv"
 	"strings"
 
 	"image"
+
 	"../adbbot"
 
 	"../3rd/websocket"
 )
 
-var localAddr = flag.String("l", ":5800", "")
-var daemonAddr = flag.String("t", "127.0.0.1:6900", "")
+var (
+	localAddr  = flag.String("l", ":5800", "")
+	daemonAddr = flag.String("t", "127.0.0.1:6900", "")
 
-var wsComp = flag.Bool("wscomp", false, "ws compression")
-var compress = flag.Bool("comp", false, "compress connection")
+	wsComp   = flag.Bool("wscomp", false, "ws compression")
+	compress = flag.Bool("comp", false, "compress connection")
 
-var reflash = flag.Int("r", 1000, "update screen minimum time (ms)")
+	reflash = flag.Int("r", 1000, "update screen minimum time (ms)")
 
-var verbosity = flag.Int("v", 3, "verbosity")
+	verbosity = flag.Int("v", 3, "verbosity")
+)
 
 type OP struct {
-	Type      int	// 0 >> Key, 1 >> touch
-	Op        string
-	X0        int
-	Y0        int
-	Ev        int
+	Type int // 0 >> Key, 1 >> touch
+	Op   string
+	X0   int
+	Y0   int
+	Ev   int
 }
 
-var upgrader = websocket.Upgrader{ EnableCompression: false } // use default options
+var upgrader = websocket.Upgrader{EnableCompression: false} // use default options
 
 func ws(w http.ResponseWriter, r *http.Request) {
 	c, err := upgrader.Upgrade(w, r, nil)
@@ -55,7 +58,7 @@ func ws(w http.ResponseWriter, r *http.Request) {
 	atomic.AddInt32(&clientCount, int32(1))
 	defer atomic.AddInt32(&clientCount, int32(-1))
 
-	select{
+	select {
 	case pollNotify <- struct{}{}:
 	default:
 	}
@@ -81,10 +84,10 @@ func ws(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				continue
 			}
-			t := OP {
+			t := OP{
 				Type: 0,
-				Op: lines[1],
-				Ev: int(ev),
+				Op:   lines[1],
+				Ev:   int(ev),
 			}
 			Vln(3, "[key]", t)
 			op <- t
@@ -118,11 +121,11 @@ func mvs(mvs []string) {
 			return
 		}
 
-		t := OP {
+		t := OP{
 			Type: 1,
-			X0: int(x),
-			Y0: int(y),
-			Ev: int(ev),
+			X0:   int(x),
+			Y0:   int(y),
+			Ev:   int(ev),
 		}
 		Vln(5, "[mv]", t)
 		op <- t
@@ -133,21 +136,21 @@ func keys(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, html)
 }
 
-
 type Wsclient struct {
 	*websocket.Conn
 	data chan []byte
 }
+
 func (c *Wsclient) Send(buf []byte) {
 	select {
-	case <- c.data:
+	case <-c.data:
 	default:
 	}
 	c.data <- buf
 }
 func (c *Wsclient) worker() {
 	for {
-		buf := <- c.data
+		buf := <-c.data
 		err := c.WriteMessage(websocket.BinaryMessage, buf)
 		if err != nil {
 			c.Close()
@@ -158,19 +161,20 @@ func (c *Wsclient) worker() {
 
 var newclients chan *websocket.Conn
 var screen chan []byte
+
 func broacast() {
 	newclients = make(chan *websocket.Conn, 16)
 	screen = make(chan []byte, 1)
 	clients := make(map[*Wsclient]*Wsclient, 0)
 
 	for {
-		img := <- screen
+		img := <-screen
 		for _, c := range clients {
 			c.Send(img)
 		}
 		for len(newclients) > 0 {
 			client := <-newclients
-			c := &Wsclient{ client, make(chan []byte, 1) }
+			c := &Wsclient{client, make(chan []byte, 1)}
 			go c.worker()
 			clients[c] = c
 			Vln(3, "[new client]", client.RemoteAddr())
@@ -180,6 +184,7 @@ func broacast() {
 
 var clientCount int32 = 0
 var pollNotify = make(chan struct{}, 1)
+
 func pollimg(bot adbbot.Bot) {
 	var err error
 	var buf []byte
@@ -188,7 +193,7 @@ func pollimg(bot adbbot.Bot) {
 
 	for {
 		if atomic.LoadInt32(&clientCount) == 0 { // block untill have any client
-			<- pollNotify
+			<-pollNotify
 		}
 
 		start := time.Now()
@@ -207,7 +212,7 @@ func pollimg(bot adbbot.Bot) {
 		Vln(4, "[screen][pull]", len(buf), time.Since(start))
 
 		select {
-		case <- screen:
+		case <-screen:
 		default:
 		}
 		screen <- buf
@@ -219,24 +224,25 @@ func pollimg(bot adbbot.Bot) {
 }
 
 var op chan OP
+
 func pushop(bot adbbot.Bot) {
 	op = make(chan OP, 4)
 
 	var evmap = map[int]adbbot.KeyAction{
 		-1: adbbot.KEY_UP,
-		0: adbbot.KEY_MV,
-		1: adbbot.KEY_DOWN,
+		0:  adbbot.KEY_MV,
+		1:  adbbot.KEY_DOWN,
 	}
 
 	var keymap = map[string]string{
-		"home": "KEYCODE_HOME",
-		"back": "KEYCODE_BACK",
-		"task": "KEYCODE_APP_SWITCH",
+		"home":  "KEYCODE_HOME",
+		"back":  "KEYCODE_BACK",
+		"task":  "KEYCODE_APP_SWITCH",
 		"power": "KEYCODE_POWER",
 	}
 
 	for {
-		todo := <- op
+		todo := <-op
 
 		switch todo.Type {
 		case 0:
@@ -262,11 +268,11 @@ func pushop(bot adbbot.Bot) {
 }
 
 func main() {
-	log.SetFlags(log.Ldate|log.Ltime)
+	log.SetFlags(log.Ldate | log.Ltime)
 	flag.Parse()
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
-//	adbbot.Verbosity = *verbosity
+	// adbbot.Verbosity = *verbosity
 
 	upgrader.EnableCompression = *wsComp
 	Vf(1, "ws EnableCompression = %v\n", *wsComp)
@@ -292,7 +298,7 @@ func main() {
 	http.HandleFunc("/ws", ws)
 	http.HandleFunc("/", keys)
 	http.ListenAndServe(*localAddr, nil)
-	
+
 }
 
 func Vln(level int, v ...interface{}) {
@@ -529,4 +535,3 @@ $(document).ready(function(e) {
 
 </script>
 </html>`
-
